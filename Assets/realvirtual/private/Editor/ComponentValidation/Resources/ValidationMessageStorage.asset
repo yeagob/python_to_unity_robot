@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f30627afabcec6746bc3ca24742b1675, type: 3}
+  m_Name: ValidationMessageStorage
+  m_EditorClassIdentifier: 
+  messages:
+  - message: '[Validation: Sensor Setup] No signals configured on sensor - it won''t
+      communicate occupation state'
+    logType: 2
+    timestamp: 09:39:04
+    context: {fileID: 1716740455877600278, guid: f01c8336aca412747874cb1309912a0d, type: 3}
+  - message: '[Validation: Sensor Setup] No signals configured on sensor - it won''t
+      communicate occupation state'
+    logType: 2
+    timestamp: 09:39:10
+    context: {fileID: 2432971919518251889, guid: d03e2d83daf773d4bb076190f7c9e870, type: 3}
+  hasNewMessages: 1

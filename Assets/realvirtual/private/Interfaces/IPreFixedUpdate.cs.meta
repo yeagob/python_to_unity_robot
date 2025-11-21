@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: c45b031aef6d14d449f7aa585cd495bd
+AssetOrigin:
+  serializedVersion: 1
+  productId: 303030
+  packageName: realvirtual.io Digital Twin Starter 6
+  packageVersion: 6.0.8.8275
+  assetPath: Assets/realvirtual/private/Interfaces/IPreFixedUpdate.cs
+  uploadId: 820840

@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: 47a2ec5cbe6a9854cb9addc49e6df596
+AssetOrigin:
+  serializedVersion: 1
+  productId: 303030
+  packageName: realvirtual.io Digital Twin Starter 6
+  packageVersion: 6.0.8.8275
+  assetPath: Assets/realvirtual/private/RuntimeUI/UIComponents/Scripts/rvUICameraFocusButton.cs
+  uploadId: 820840

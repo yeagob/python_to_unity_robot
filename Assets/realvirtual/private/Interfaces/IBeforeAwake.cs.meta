@@ -1,0 +1,9 @@
+fileFormatVersion: 2
+guid: e790192b58e4a274a91dcd6603ebffbd
+AssetOrigin:
+  serializedVersion: 1
+  productId: 303030
+  packageName: realvirtual.io Digital Twin Starter 6
+  packageVersion: 6.0.8.8275
+  assetPath: Assets/realvirtual/private/Interfaces/IBeforeAwake.cs
+  uploadId: 820840
