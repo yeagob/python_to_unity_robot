@@ -84,11 +84,7 @@ namespace RobotSimulation.Services
 
         private void ExecuteNetworkLoop()
         {
-            // NOTE: This implementation requires NetMQ package to be installed in Unity
-            // Install via NuGet or download from: https://github.com/zeromq/netmq
-            //
-            // When NetMQ is installed, uncomment the following code:
-            /*
+            
             AsyncIO.ForceDotNet.Force();
 
             using (var responseSocket = new NetMQ.Sockets.ResponseSocket())
@@ -98,9 +94,8 @@ namespace RobotSimulation.Services
 
                 while (_isRunning)
                 {
-                    bool didReceiveRequest = responseSocket.TryReceiveFrameString(
-                        TimeSpan.FromMilliseconds(100),
-                        out string receivedRequest);
+                    bool didReceiveRequest = responseSocket.TryReceive(                      
+                        out string receivedRequest, TimeSpan.FromMilliseconds(100));
 
                     if (didReceiveRequest)
                     {
@@ -111,22 +106,10 @@ namespace RobotSimulation.Services
             }
 
             NetMQ.NetMQConfig.Cleanup();
-            */
-
-            // Placeholder loop - simulates network waiting
-            while (_isRunning)
-            {
-                Thread.Sleep(100);
-
-                // Process any pending responses (for testing without NetMQ)
-                while (_outgoingResponseQueue.TryDequeue(out string response))
-                {
-                    // Response would be sent here
-                }
-            }
+            
         }
 
-        /*
+        
         private void WaitForAndSendResponse(NetMQ.Sockets.ResponseSocket socket)
         {
             while (!_outgoingResponseQueue.TryDequeue(out string responseToSend))
@@ -139,8 +122,7 @@ namespace RobotSimulation.Services
                 }
             }
 
-            socket.SendFrame(responseToSend);
+            socket.TrySend(responseToSend);
         }
-        */
     }
 }

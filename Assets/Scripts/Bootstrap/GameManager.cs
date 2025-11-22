@@ -8,8 +8,15 @@ using RobotSimulation.Services.Interfaces;
 
 namespace RobotSimulation.Bootstrap
 {
-    public sealed class GameManager : MonoBehaviour
+
+    public class GameManager : MonoBehaviour
     {
+        [System.Serializable]
+        private class ConfigurationResponse
+        {
+            public string status;
+        }
+
         [Header("Controller References")]
         [SerializeField] private RobotController _robotController;
         [SerializeField] private SensorController _sensorController;
@@ -168,12 +175,6 @@ namespace RobotSimulation.Bootstrap
             _networkService.SendResponse(responseJson);
 
             Debug.Log($"GameManager: Mode changed to {_currentControlMode}");
-        }
-
-        [System.Serializable]
-        private sealed class ConfigurationResponse
-        {
-            public string status;
         }
 
         private ObservationModel BuildObservationModel(bool isResetFrame)
