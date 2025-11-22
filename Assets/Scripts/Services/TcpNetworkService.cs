@@ -7,6 +7,7 @@ using System.Collections.Concurrent;
 using UnityEngine;
 using RobotSimulation.Models;
 using RobotSimulation.Services.Interfaces;
+using System.IO;
 
 namespace RobotSimulation.Services
 {
@@ -232,7 +233,8 @@ namespace RobotSimulation.Services
 
         private void WaitAndSendResponse()
         {
-            while (!_outgoingResponseQueue.TryDequeue(out string response))
+            string response;
+            while (!_outgoingResponseQueue.TryDequeue(out response))
             {
                 Thread.Sleep(1);
 
