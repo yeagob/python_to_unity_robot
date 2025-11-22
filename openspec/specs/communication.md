@@ -1,24 +1,26 @@
-# Communication Specification: ZeroMQ Python-Unity Protocol
+# Communication Specification: TCP Socket Python-Unity Protocol
 
-**Version:** 2.0.0
+**Version:** 3.0.0
 **Last Updated:** 2025-11-22
 **Status:** Active
 
 ## Overview
 
-This specification defines the ZeroMQ-based communication protocol between Python RL agents and the Unity robot simulation. The protocol uses the REQ-REP (Request-Reply) pattern with JSON payloads, ensuring Python controls the simulation step for deterministic reinforcement learning training.
+This specification defines the TCP Socket-based communication protocol between Python RL agents and the Unity robot simulation. The protocol uses a simple synchronous TCP connection with JSON payloads, ensuring Python controls the simulation step for deterministic reinforcement learning training.
+
+**Note:** This replaces the previous ZeroMQ/NetMQ implementation due to compatibility issues with Unity (see: https://github.com/zeromq/netmq/issues/631).
 
 ---
 
 ## Requirements
 
-### Requirement: COMM-001 - ZeroMQ Connection
-The system SHALL use ZeroMQ REQ-REP pattern for communication between Python and Unity.
+### Requirement: COMM-001 - TCP Socket Connection
+The system SHALL use standard TCP sockets for communication between Python and Unity.
 
 #### Scenario: Connection Establishment
-- WHEN Python client creates a ZMQ REQ socket
-- AND connects to `tcp://localhost:5555`
-- THEN the Unity server SHALL accept the connection via ResponseSocket
+- WHEN Python client creates a TCP socket
+- AND connects to `localhost:5555`
+- THEN the Unity server SHALL accept the connection via TcpListener
 - AND be ready to process requests
 
 #### Scenario: Request-Reply Cycle
@@ -35,30 +37,37 @@ The system SHALL use ZeroMQ REQ-REP pattern for communication between Python and
 ---
 
 ### Requirement: COMM-002 - Message Format
-The system SHALL use JSON for all message serialization.
+The system SHALL use length-prefixed JSON for all message serialization.
+
+#### Scenario: Message Framing
+- WHEN a message is sent
+- THEN it SHALL be prefixed with a 4-byte big-endian integer (message length)
+- AND followed by UTF-8 encoded JSON
+- AND this SHALL prevent message fragmentation issues
 
 #### Scenario: Command Message (Python → Unity)
 - WHEN Python sends a command
 - THEN the message SHALL be a JSON object containing:
-  - `type`: Command type string ("STEP", "RESET", "CONFIG")
-  - `actions`: Array of 4 float values (joint deltas) for STEP
-  - `gripperClose`: Float 0-1 for gripper action
-  - `simulationMode`: Boolean for CONFIG commands
+  - `Type`: Command type string ("STEP", "RESET", "CONFIG")
+  - `Actions`: Array of 5 float values (joint deltas for axes 1-5) for STEP
+  - `GripperCloseValue`: Float 0-1 for gripper action
+  - `Axis6Orientation`: Float (0=vertical, 1=horizontal) for discrete axis 6
+  - `SimulationModeEnabled`: Boolean for CONFIG commands
 
 #### Scenario: Observation Message (Unity → Python)
 - WHEN Unity responds to a command
 - THEN the message SHALL be a JSON object containing:
-  - `jointAngles`: Array of 4 float values (degrees)
-  - `tcpPosition`: Array of 3 float values (x, y, z meters)
-  - `directionToTarget`: Array of 3 float values (normalized)
-  - `distanceToTarget`: Float (meters)
-  - `gripperState`: Float 0-1 (open percentage)
-  - `isGripping`: Boolean
-  - `laserHit`: Boolean
-  - `laserDistance`: Float (meters)
-  - `collision`: Boolean
-  - `targetOrientation`: Array of 2 floats (one-hot)
-  - `reset`: Boolean (true after RESET command)
+  - `JointAngles`: Array of 6 float values (degrees)
+  - `ToolCenterPointPosition`: Array of 3 float values (x, y, z meters)
+  - `DirectionToTarget`: Array of 3 float values (normalized)
+  - `DistanceToTarget`: Float (meters)
+  - `GripperState`: Float 0-1 (open percentage)
+  - `IsGrippingObject`: Boolean
+  - `LaserSensorHit`: Boolean
+  - `LaserSensorDistance`: Float (meters)
+  - `CollisionDetected`: Boolean
+  - `TargetOrientationOneHot`: Array of 2 floats (one-hot)
+  - `IsResetFrame`: Boolean (true after RESET command)
 
 #### Scenario: Error Response
 - WHEN an error occurs during processing
@@ -71,24 +80,25 @@ The system SHALL use JSON for all message serialization.
 The system SHALL support three command types for RL training.
 
 #### Scenario: STEP Command
-- WHEN Python sends `{"type": "STEP", "actions": [...], "gripperClose": 0.5}`
+- WHEN Python sends `{"Type": "STEP", "Actions": [...], "GripperCloseValue": 0.5}`
 - THEN Unity SHALL:
-  1. Apply delta angles to current joint positions
-  2. Set gripper state (>0.5 = closed)
-  3. Execute one physics step
-  4. Build and return observation
+  1. Apply delta angles to current joint positions (axes 1-5)
+  2. Set axis 6 orientation (discrete: 0° or 90°)
+  3. Set gripper state (>0.5 = closed)
+  4. Execute one physics step
+  5. Build and return observation
 
 #### Scenario: RESET Command
-- WHEN Python sends `{"type": "RESET"}`
+- WHEN Python sends `{"Type": "RESET"}`
 - THEN Unity SHALL:
   1. Reset robot to home position (all joints = 0)
   2. Open gripper
   3. Spawn new target at random position
   4. Clear collision flags
-  5. Return observation with `reset: true`
+  5. Return observation with `IsResetFrame: true`
 
 #### Scenario: CONFIG Command
-- WHEN Python sends `{"type": "CONFIG", "simulationMode": true}`
+- WHEN Python sends `{"Type": "CONFIG", "SimulationModeEnabled": true}`
 - THEN Unity SHALL switch to simulation mode (smooth interpolation)
 - AND respond with `{"status": "ok"}`
 
@@ -98,7 +108,7 @@ The system SHALL support three command types for RL training.
 The system SHALL handle network I/O on a dedicated thread in Unity.
 
 #### Scenario: Unity Server Threading
-- WHEN the ZMQ server starts
+- WHEN the TCP server starts
 - THEN network I/O SHALL run on a background thread
 - AND requests SHALL be queued via ConcurrentQueue
 - AND processing SHALL occur in FixedUpdate (main thread)
@@ -130,55 +140,65 @@ The system SHALL guarantee deterministic simulation for RL training.
 
 ## Protocol Details
 
-### ZeroMQ Configuration
+### TCP Socket Configuration
 
 | Parameter | Python (Client) | Unity (Server) |
 |-----------|-----------------|----------------|
-| Socket Type | REQ | REP (ResponseSocket) |
-| Address | tcp://localhost:5555 | tcp://*:5555 |
-| Library | pyzmq | NetMQ |
-| Timeout | 5000ms | 100ms poll |
+| Socket Type | TCP Client | TcpListener |
+| Address | localhost:5555 | 0.0.0.0:5555 |
+| Library | socket (stdlib) | System.Net.Sockets |
+| Timeout | 5000ms | Blocking with flag |
+
+### Message Framing
+
+```
++----------------+------------------+
+| Length (4 bytes)| JSON Payload     |
+| Big-endian int | UTF-8 encoded    |
++----------------+------------------+
+```
 
 ### Message Examples
 
 #### STEP Command
 ```json
 {
-  "type": "STEP",
-  "actions": [5.0, -2.5, 3.0, 1.0],
-  "gripperClose": 0.8
+  "Type": "STEP",
+  "Actions": [5.0, -2.5, 3.0, 1.0, -1.0],
+  "Axis6Orientation": 0.0,
+  "GripperCloseValue": 0.8
 }
 ```
 
 #### STEP Response
 ```json
 {
-  "jointAngles": [45.0, -30.0, 60.0, 15.0],
-  "tcpPosition": [0.35, 0.25, 0.15],
-  "directionToTarget": [0.57, 0.57, 0.57],
-  "distanceToTarget": 0.12,
-  "gripperState": 0.2,
-  "isGripping": true,
-  "laserHit": true,
-  "laserDistance": 0.05,
-  "collision": false,
-  "targetOrientation": [1.0, 0.0],
-  "reset": false
+  "JointAngles": [45.0, -30.0, 60.0, 15.0, 10.0, 0.0],
+  "ToolCenterPointPosition": [0.35, 0.25, 0.15],
+  "DirectionToTarget": [0.57, 0.57, 0.57],
+  "DistanceToTarget": 0.12,
+  "GripperState": 0.2,
+  "IsGrippingObject": true,
+  "LaserSensorHit": true,
+  "LaserSensorDistance": 0.05,
+  "CollisionDetected": false,
+  "TargetOrientationOneHot": [1.0, 0.0],
+  "IsResetFrame": false
 }
 ```
 
 #### RESET Command
 ```json
 {
-  "type": "RESET"
+  "Type": "RESET"
 }
 ```
 
 #### CONFIG Command
 ```json
 {
-  "type": "CONFIG",
-  "simulationMode": true
+  "Type": "CONFIG",
+  "SimulationModeEnabled": true
 }
 ```
 
@@ -187,41 +207,74 @@ The system SHALL guarantee deterministic simulation for RL training.
 ## Python Client Implementation
 
 ```python
-import zmq
+import socket
+import struct
 import json
+from typing import Optional
 
-class UnityConnection:
-    def __init__(self, address="tcp://localhost:5555"):
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect(address)
-        self.socket.setsockopt(zmq.RCVTIMEO, 5000)
 
-    def send_command(self, cmd: dict) -> dict:
-        """Send command and wait for response (blocking)."""
-        self.socket.send_string(json.dumps(cmd))
-        response = self.socket.recv_string()
-        return json.loads(response)
+class TcpNetworkService:
+    """TCP socket client for Unity communication."""
 
-    def step(self, actions: list, gripper: float) -> dict:
-        return self.send_command({
-            "type": "STEP",
-            "actions": actions,
-            "gripperClose": gripper
-        })
+    DEFAULT_HOST: str = "localhost"
+    DEFAULT_PORT: int = 5555
+    DEFAULT_TIMEOUT_SECONDS: float = 5.0
 
-    def reset(self) -> dict:
-        return self.send_command({"type": "RESET"})
+    def __init__(
+        self,
+        host: str = DEFAULT_HOST,
+        port: int = DEFAULT_PORT
+    ) -> None:
+        self._host: str = host
+        self._port: int = port
+        self._socket: Optional[socket.socket] = None
+        self._is_connected: bool = False
 
-    def set_mode(self, simulation: bool) -> dict:
-        return self.send_command({
-            "type": "CONFIG",
-            "simulationMode": simulation
-        })
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
 
-    def close(self):
-        self.socket.close()
-        self.context.term()
+    def connect(self) -> None:
+        """Establish TCP connection to Unity server."""
+        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._socket.settimeout(self.DEFAULT_TIMEOUT_SECONDS)
+        self._socket.connect((self._host, self._port))
+        self._is_connected = True
+
+    def disconnect(self) -> None:
+        """Close TCP connection."""
+        if self._socket is not None:
+            self._socket.close()
+            self._socket = None
+        self._is_connected = False
+
+    def send_command(self, command: dict) -> dict:
+        """Send command and receive response (blocking)."""
+        if not self._is_connected:
+            raise RuntimeError("Not connected to Unity server")
+
+        # Serialize and send with length prefix
+        json_bytes = json.dumps(command).encode("utf-8")
+        length_prefix = struct.pack(">I", len(json_bytes))
+        self._socket.sendall(length_prefix + json_bytes)
+
+        # Receive length prefix
+        length_data = self._receive_exact(4)
+        message_length = struct.unpack(">I", length_data)[0]
+
+        # Receive message body
+        response_bytes = self._receive_exact(message_length)
+        return json.loads(response_bytes.decode("utf-8"))
+
+    def _receive_exact(self, num_bytes: int) -> bytes:
+        """Receive exactly num_bytes from socket."""
+        data = b""
+        while len(data) < num_bytes:
+            chunk = self._socket.recv(num_bytes - len(data))
+            if not chunk:
+                raise ConnectionError("Connection closed by server")
+            data += chunk
+        return data
 ```
 
 ---
@@ -229,60 +282,152 @@ class UnityConnection:
 ## Unity Server Implementation
 
 ```csharp
-using NetMQ;
-using NetMQ.Sockets;
+using System;
+using System.Net;
+using System.Net.Sockets;
+using System.Text;
 using System.Threading;
 using System.Collections.Concurrent;
+using UnityEngine;
 
-public class ZMQBridge
+public sealed class TcpNetworkService : INetworkService
 {
-    private ResponseSocket server;
-    private ConcurrentQueue<string> requests = new();
-    private ConcurrentQueue<string> responses = new();
-    private bool running;
+    private TcpListener _listener;
+    private TcpClient _client;
+    private NetworkStream _stream;
+    private Thread _networkThread;
+    private ConcurrentQueue<string> _incomingRequests;
+    private ConcurrentQueue<string> _outgoingResponses;
+    private volatile bool _isRunning;
+    private int _port;
 
-    public void Start(string address = "tcp://*:5555")
+    public bool IsConnected => _client?.Connected ?? false;
+
+    public TcpNetworkService()
     {
-        running = true;
-        new Thread(() => ServerLoop(address)).Start();
+        _incomingRequests = new ConcurrentQueue<string>();
+        _outgoingResponses = new ConcurrentQueue<string>();
     }
 
-    private void ServerLoop(string address)
+    public void Initialize(int port)
     {
-        AsyncIO.ForceDotNet.Force();
-        using (server = new ResponseSocket())
-        {
-            server.Bind(address);
-            while (running)
-            {
-                if (server.TryReceiveFrameString(
-                    TimeSpan.FromMilliseconds(100), out string req))
-                {
-                    requests.Enqueue(req);
+        _port = port;
+        _isRunning = true;
+        _networkThread = new Thread(NetworkLoop) { IsBackground = true };
+        _networkThread.Start();
+        Debug.Log($"TcpNetworkService: Listening on port {port}");
+    }
 
-                    // Wait for main thread response
-                    while (!responses.TryDequeue(out string resp))
+    private void NetworkLoop()
+    {
+        _listener = new TcpListener(IPAddress.Any, _port);
+        _listener.Start();
+
+        while (_isRunning)
+        {
+            try
+            {
+                if (_client == null || !_client.Connected)
+                {
+                    if (_listener.Pending())
+                    {
+                        _client = _listener.AcceptTcpClient();
+                        _stream = _client.GetStream();
+                        Debug.Log("TcpNetworkService: Client connected");
+                    }
+                    else
+                    {
+                        Thread.Sleep(10);
+                        continue;
+                    }
+                }
+
+                if (_stream.DataAvailable)
+                {
+                    string request = ReceiveMessage();
+                    _incomingRequests.Enqueue(request);
+
+                    // Wait for response from main thread
+                    while (!_outgoingResponses.TryDequeue(out string response))
                     {
                         Thread.Sleep(1);
-                        if (!running) return;
+                        if (!_isRunning) return;
                     }
-                    server.SendFrame(resp);
+                    SendMessage(response);
+                }
+                else
+                {
+                    Thread.Sleep(1);
                 }
             }
+            catch (Exception ex)
+            {
+                Debug.LogError($"TcpNetworkService: {ex.Message}");
+                _client?.Close();
+                _client = null;
+            }
         }
-        NetMQConfig.Cleanup();
+
+        _listener?.Stop();
     }
 
-    // Call from FixedUpdate
-    public bool TryGetRequest(out string request)
-        => requests.TryDequeue(out request);
-
-    public void SendResponse(string response)
-        => responses.Enqueue(response);
-
-    public void Stop()
+    private string ReceiveMessage()
     {
-        running = false;
+        byte[] lengthBuffer = new byte[4];
+        _stream.Read(lengthBuffer, 0, 4);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(lengthBuffer);
+        int length = BitConverter.ToInt32(lengthBuffer, 0);
+
+        byte[] messageBuffer = new byte[length];
+        int bytesRead = 0;
+        while (bytesRead < length)
+        {
+            bytesRead += _stream.Read(messageBuffer, bytesRead, length - bytesRead);
+        }
+        return Encoding.UTF8.GetString(messageBuffer);
+    }
+
+    private void SendMessage(string message)
+    {
+        byte[] messageBytes = Encoding.UTF8.GetBytes(message);
+        byte[] lengthBytes = BitConverter.GetBytes(messageBytes.Length);
+        if (BitConverter.IsLittleEndian)
+            Array.Reverse(lengthBytes);
+
+        _stream.Write(lengthBytes, 0, 4);
+        _stream.Write(messageBytes, 0, messageBytes.Length);
+        _stream.Flush();
+    }
+
+    public bool TryReceiveCommand(out CommandModel command)
+    {
+        command = null;
+        if (_incomingRequests.TryDequeue(out string json))
+        {
+            command = JsonUtility.FromJson<CommandModel>(json);
+            return true;
+        }
+        return false;
+    }
+
+    public void SendObservation(ObservationModel obs)
+    {
+        _outgoingResponses.Enqueue(JsonUtility.ToJson(obs));
+    }
+
+    public void SendResponse(string json)
+    {
+        _outgoingResponses.Enqueue(json);
+    }
+
+    public void Shutdown()
+    {
+        _isRunning = false;
+        _client?.Close();
+        _listener?.Stop();
+        _networkThread?.Join(1000);
+        Debug.Log("TcpNetworkService: Shutdown complete");
     }
 }
 ```
@@ -293,19 +438,39 @@ public class ZMQBridge
 
 | Error | Python Handling | Unity Handling |
 |-------|-----------------|----------------|
-| Connection failed | Retry with backoff | Log and continue |
+| Connection failed | Retry with backoff | Log and await |
 | Timeout | Raise exception | N/A |
 | Malformed JSON | Raise exception | Return error response |
-| Unknown command | Log warning | Return error response |
+| Connection lost | Reconnect | Accept new connection |
+
+---
+
+## Migration from ZeroMQ
+
+### Why TCP Sockets?
+
+1. **No external dependencies** - Uses standard library on both sides
+2. **Unity compatibility** - No NetMQ issues with debugger or context cleanup
+3. **Simpler debugging** - Standard tools work (netcat, wireshark)
+4. **Same semantics** - Still synchronous request-reply pattern
+
+### Changes Required
+
+| Component | ZeroMQ | TCP Sockets |
+|-----------|--------|-------------|
+| Python import | `import zmq` | `import socket` |
+| Unity package | NetMQ NuGet | System.Net.Sockets |
+| Message format | Raw string | Length-prefixed |
+| Field naming | camelCase | PascalCase (JsonUtility) |
 
 ---
 
 ## Performance Considerations
 
-1. **Latency**: ZeroMQ optimized for low-latency messaging
+1. **Latency**: TCP adds ~0.1ms vs ZMQ, negligible for 50Hz
 2. **Throughput**: Single request per physics step (~50 req/sec)
 3. **Memory**: Minimal allocation per message
-4. **Threading**: Network I/O isolated from physics thread
+4. **Reliability**: TCP guarantees delivery and ordering
 
 ---
 

@@ -76,7 +76,7 @@ namespace RobotSimulation.Bootstrap
 
             _targetService = new RandomTargetService();
 
-            _networkService = new ZeroMQNetworkService();
+            _networkService = new TcpNetworkService();
             _networkService.Initialize(_configuration.NetworkPortNumber);
         }
 

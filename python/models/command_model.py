@@ -9,7 +9,10 @@ from enums.command_type import CommandType
 
 @dataclass
 class CommandModel:
-    """Command to send to Unity simulation."""
+    """Command to send to Unity simulation.
+
+    Uses PascalCase field names for Unity JsonUtility compatibility.
+    """
 
     command_type: CommandType
     actions: Optional[List[float]] = None
@@ -18,19 +21,22 @@ class CommandModel:
     simulation_mode_enabled: Optional[bool] = None
 
     def to_dictionary(self) -> dict:
-        """Convert command to dictionary for JSON serialization."""
-        result: dict = {"type": self.command_type.value}
+        """Convert command to dictionary for JSON serialization.
+
+        Uses PascalCase keys for Unity JsonUtility compatibility.
+        """
+        result: dict = {"Type": self.command_type.value}
 
         if self.actions is not None:
-            result["actions"] = self.actions
+            result["Actions"] = self.actions
 
         if self.gripper_close_value is not None:
-            result["gripperClose"] = self.gripper_close_value
+            result["GripperCloseValue"] = self.gripper_close_value
 
         if self.axis_6_orientation is not None:
-            result["axis6Orientation"] = self.axis_6_orientation
+            result["Axis6Orientation"] = self.axis_6_orientation
 
         if self.simulation_mode_enabled is not None:
-            result["simulationMode"] = self.simulation_mode_enabled
+            result["SimulationModeEnabled"] = self.simulation_mode_enabled
 
         return result

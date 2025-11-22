@@ -21,7 +21,25 @@ The robot has 6 axes with the following constraints:
 | 3 | X | ±90° (180° total) | Elbow joint |
 | 4 | X | ±180° (360° total) | Wrist rotation (head axis) |
 | 5 | Z | ±90° (180° total) | Wrist bend |
-| 6 | X | 0° or 90° (discrete) | Gripper orientation (0°=vertical, 90°=horizontal)
+| 6 | X | 0° or 90° (discrete) | Head orientation (0°=vertical, 90°=horizontal)
+
+### Gripper Mechanism
+
+The gripper consists of two parallel plates that slide toward the center of the head. The gripping action is achieved by pressure:
+
+- **Mechanism**: Two flat plates move horizontally toward each other
+- **Grip Action**: Plates move toward center until laser sensor distance reads zero
+- **Release Action**: Plates move away from center to open position
+- **Sensor Feedback**: Laser distance sensor indicates proximity to object (0 = contact)
+
+```
+    ┌─────┐              ┌─────┐
+    │     │    Object    │     │
+    │Plate│ ◄──────────► │Plate│
+    │ L   │              │  R  │
+    └─────┘              └─────┘
+       ◄───── Close ─────►
+```
 
 ---
 
