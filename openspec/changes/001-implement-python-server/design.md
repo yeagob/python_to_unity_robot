@@ -1,6 +1,6 @@
 # Technical Design: 4-DOF Robotic System with RL Sim-to-Real
 
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Change ID:** 001
 **Date:** 2025-11-22
 **Target:** AI Development Agent (Code Generation Agent)
@@ -8,1165 +8,2221 @@
 
 ---
 
+## Code Standards Applied
+
+| Standard | Description |
+|----------|-------------|
+| Strong Typing | No `var`, explicit types everywhere |
+| Naming Convention | `[SerializeField] private Type _fieldName;` |
+| Encapsulation | Properties for access, private backing fields |
+| Always Braces | Even single-line blocks |
+| Bootstrap Pattern | GameManager centralizes initialization |
+| SOLID | All five principles applied |
+| MVCS | Model-View-Controller-Service architecture |
+| Separate Files | One enum/class per file |
+| Self-Documenting | Minimal comments, descriptive names |
+| Explicit Visibility | Always specify public/private/protected |
+
+---
+
 ## 1. System Architecture
-
-The system follows an **Asynchronous Decoupled Client-Server Architecture**.
-
-| Component | Role |
-|-----------|------|
-| **Server (Unity 3D)** | Physics simulation engine, rendering, kinematics execution |
-| **Client (Python)** | Brain (RL Agent), state management, Control Panel (UI) |
-| **Communication Bridge** | ZeroMQ (ZMQ) using REQ-REP pattern with JSON payloads |
-
-**Key Principle:** Python controls the simulation "step", ensuring deterministic RL training.
-
-### 1.1 Data Flow Diagram
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                              TRAINING LOOP                                   │
+│                              MVCS ARCHITECTURE                               │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-┌─────────────────────┐                              ┌─────────────────────┐
-│     PYTHON          │                              │      UNITY 3D       │
-│  (RL Agent/Brain)   │                              │   (Physics Engine)  │
-├─────────────────────┤                              ├─────────────────────┤
-│                     │      Action + Config         │                     │
-│  ┌───────────────┐  │  ─────────────────────────▶  │  ┌───────────────┐  │
-│  │ PPO/SAC Agent │  │         JSON/ZMQ             │  │ ArticulationBody│ │
-│  └───────────────┘  │                              │  │   4-DOF Robot  │  │
-│         │           │                              │  └───────────────┘  │
-│         ▼           │                              │         │           │
-│  ┌───────────────┐  │                              │         ▼           │
-│  │ Gymnasium Env │  │                              │  ┌───────────────┐  │
-│  │ - step()      │  │      Observation + Reward    │  │ Physics Step  │  │
-│  │ - reset()     │  │  ◀─────────────────────────  │  │ FixedUpdate() │  │
-│  │ - reward()    │  │         JSON/ZMQ             │  └───────────────┘  │
-│  └───────────────┘  │                              │         │           │
-│         │           │                              │         ▼           │
-│         ▼           │                              │  ┌───────────────┐  │
-│  ┌───────────────┐  │                              │  │ Laser Sensor  │  │
-│  │ Control Panel │  │                              │  │ (Raycast)     │  │
-│  │ (CustomTkinter)│ │                              │  └───────────────┘  │
-│  └───────────────┘  │                              │                     │
-└─────────────────────┘                              └─────────────────────┘
-         │                                                     │
-         └──────────────────────┬──────────────────────────────┘
-                                │
-                    ┌───────────▼───────────┐
-                    │       ZeroMQ          │
-                    │   REQ-REP Pattern     │
-                    │   Port: 5555          │
-                    └───────────────────────┘
+┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
+│       MODELS        │    │     CONTROLLERS     │    │      SERVICES       │
+├─────────────────────┤    ├─────────────────────┤    ├─────────────────────┤
+│ RobotStateModel     │◄───│ RobotController     │───►│ IRobotService       │
+│ ObservationModel    │    │ NetworkController   │    │ INetworkService     │
+│ CommandModel        │    │ SensorController    │    │ ISensorService      │
+│ ConfigurationModel  │    │ TargetController    │    │ ITargetService      │
+└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
+                                     │
+                                     ▼
+                           ┌─────────────────────┐
+                           │    GAME MANAGER     │
+                           │  (Bootstrap Entry)  │
+                           └─────────────────────┘
 ```
 
 ---
 
-## 2. Unity 3D Layer (Simulation & Physics)
-
-### 2.1 Scene Configuration and Robot Arm
-
-**Critical Decision:** Use `ArticulationBody` instead of `Rigidbody + HingeJoint`.
-
-> ArticulationBodies are infinitely superior for robotics in Unity due to their stability in kinematic chains and physical precision.
-
-#### Kinematic Hierarchy
+## 2. Unity Layer - File Structure
 
 ```
-Base (ArticulationBody - Fixed)
-└── Axis1 (ArticulationBody - Revolute Y)     ← Rotation: Yaw
-    └── Axis2 (ArticulationBody - Revolute X) ← Rotation: Pitch
-        └── Axis3 (ArticulationBody - Revolute X) ← Rotation: Pitch
-            └── Axis4 (ArticulationBody - Revolute Z/X) ← Rotation: Roll/Pitch
-                └── Wrist
-                    └── GripperBase
-                        ├── GripperLeft (Prismatic/Revolute)
-                        └── GripperRight (Prismatic/Revolute - Opposed)
+Assets/
+├── Scripts/
+│   ├── Bootstrap/
+│   │   └── GameManager.cs
+│   │
+│   ├── Models/
+│   │   ├── RobotStateModel.cs
+│   │   ├── ObservationModel.cs
+│   │   ├── CommandModel.cs
+│   │   └── ConfigurationModel.cs
+│   │
+│   ├── Controllers/
+│   │   ├── RobotController.cs
+│   │   ├── NetworkController.cs
+│   │   ├── SensorController.cs
+│   │   └── TargetController.cs
+│   │
+│   ├── Services/
+│   │   ├── Interfaces/
+│   │   │   ├── IRobotService.cs
+│   │   │   ├── INetworkService.cs
+│   │   │   ├── ISensorService.cs
+│   │   │   └── ITargetService.cs
+│   │   │
+│   │   ├── RobotService.cs
+│   │   ├── ZeroMQNetworkService.cs
+│   │   ├── LaserSensorService.cs
+│   │   └── RandomTargetService.cs
+│   │
+│   ├── Enums/
+│   │   ├── RobotControlMode.cs
+│   │   ├── CommandType.cs
+│   │   └── CollisionType.cs
+│   │
+│   └── Events/
+│       ├── RobotEvents.cs
+│       └── CollisionEvents.cs
+│
+└── Prefabs/
+    ├── Robot4DOF.prefab
+    └── TargetBox.prefab
 ```
 
-#### Joint Configuration
+---
 
-| Joint | Type | Axis | Range | Purpose |
-|-------|------|------|-------|---------|
-| Axis1 | Revolute | Y | -180° to +180° | Base rotation |
-| Axis2 | Revolute | X | -90° to +90° | Shoulder pitch |
-| Axis3 | Revolute | X | -135° to +135° | Elbow pitch |
-| Axis4 | Revolute | Z/X | -180° to +180° | Wrist roll/pitch |
-| Gripper | Prismatic | Local | 0 to 0.05m | Open/Close |
+## 3. Unity Code - Enums (Separate Files)
 
-#### Laser Sensor (Raycast)
-
+### RobotControlMode.cs
 ```csharp
-// Raycast from TCP (Tool Center Point) forward
-Ray ray = new Ray(tcp.position, tcp.forward);
-if (Physics.Raycast(ray, out RaycastHit hit, maxDistance))
+namespace RobotSimulation.Enums
 {
-    // Output: bool hit, float distance, string tag
-    sensorData.hit = true;
-    sensorData.distance = hit.distance;
-    sensorData.tag = hit.collider.tag;
+    public enum RobotControlMode
+    {
+        Training = 0,
+        Simulation = 1
+    }
 }
 ```
 
-### 2.2 Movement Controllers (C# Scripts)
+### CommandType.cs
+```csharp
+namespace RobotSimulation.Enums
+{
+    public enum CommandType
+    {
+        Step = 0,
+        Reset = 1,
+        Configuration = 2
+    }
+}
+```
 
-#### RobotController.cs
+### CollisionType.cs
+```csharp
+namespace RobotSimulation.Enums
+{
+    public enum CollisionType
+    {
+        None = 0,
+        Target = 1,
+        Environment = 2,
+        Self = 3
+    }
+}
+```
 
+---
+
+## 4. Unity Code - Models (Separate Files)
+
+### RobotStateModel.cs
 ```csharp
 using UnityEngine;
-using System.Collections.Generic;
 
-public class RobotController : MonoBehaviour
+namespace RobotSimulation.Models
 {
-    [Header("Robot Configuration")]
-    public ArticulationBody rootBody;
-    public ArticulationBody[] joints = new ArticulationBody[4];
-    public ArticulationBody gripperLeft;
-    public ArticulationBody gripperRight;
-    public Transform tcp; // Tool Center Point
-
-    [Header("Control Mode")]
-    public ControlMode mode = ControlMode.Training;
-
-    [Header("Simulation Settings")]
-    public float maxServoSpeed = 90f; // degrees/second
-    public float pidStiffness = 10000f;
-    public float pidDamping = 100f;
-
-    public enum ControlMode
+    [System.Serializable]
+    public sealed class RobotStateModel
     {
-        Training,    // Instantaneous (teleport)
-        Simulation   // Smooth interpolation
-    }
+        [SerializeField] private float[] _jointAngles;
+        [SerializeField] private Vector3 _toolCenterPointPosition;
+        [SerializeField] private Quaternion _toolCenterPointRotation;
+        [SerializeField] private float _gripperOpenPercentage;
+        [SerializeField] private bool _isGrippingObject;
 
-    // ═══════════════════════════════════════════════════════════════
-    // TRAINING MODE: Instantaneous movement for fast RL episodes
-    // ═══════════════════════════════════════════════════════════════
-    public void SetJointPositionsInstant(float[] angles)
-    {
-        for (int i = 0; i < joints.Length; i++)
+        public float[] JointAngles
         {
-            var drive = joints[i].xDrive;
-            drive.target = angles[i];
-            joints[i].xDrive = drive;
+            get { return _jointAngles; }
+            set { _jointAngles = value; }
+        }
 
-            // Force immediate position (teleport)
-            joints[i].jointPosition = new ArticulationReducedSpace(angles[i] * Mathf.Deg2Rad);
+        public Vector3 ToolCenterPointPosition
+        {
+            get { return _toolCenterPointPosition; }
+            set { _toolCenterPointPosition = value; }
+        }
+
+        public Quaternion ToolCenterPointRotation
+        {
+            get { return _toolCenterPointRotation; }
+            set { _toolCenterPointRotation = value; }
+        }
+
+        public float GripperOpenPercentage
+        {
+            get { return _gripperOpenPercentage; }
+            set { _gripperOpenPercentage = value; }
+        }
+
+        public bool IsGrippingObject
+        {
+            get { return _isGrippingObject; }
+            set { _isGrippingObject = value; }
+        }
+
+        public RobotStateModel()
+        {
+            _jointAngles = new float[4];
+            _toolCenterPointPosition = Vector3.zero;
+            _toolCenterPointRotation = Quaternion.identity;
+            _gripperOpenPercentage = 1.0f;
+            _isGrippingObject = false;
         }
     }
+}
+```
 
-    // ═══════════════════════════════════════════════════════════════
-    // SIMULATION MODE: Smooth interpolated movement
-    // ═══════════════════════════════════════════════════════════════
-    private float[] targetAngles = new float[4];
-
-    public void SetJointPositionsSmooth(float[] angles)
+### ObservationModel.cs
+```csharp
+namespace RobotSimulation.Models
+{
+    [System.Serializable]
+    public sealed class ObservationModel
     {
-        targetAngles = angles;
-    }
+        public float[] JointAngles { get; set; }
+        public float[] ToolCenterPointPosition { get; set; }
+        public float[] DirectionToTarget { get; set; }
+        public float DistanceToTarget { get; set; }
+        public float GripperState { get; set; }
+        public bool IsGrippingObject { get; set; }
+        public bool LaserSensorHit { get; set; }
+        public float LaserSensorDistance { get; set; }
+        public bool CollisionDetected { get; set; }
+        public float[] TargetOrientationOneHot { get; set; }
+        public bool IsResetFrame { get; set; }
 
-    void FixedUpdate()
-    {
-        if (mode == ControlMode.Simulation)
+        public ObservationModel()
         {
-            for (int i = 0; i < joints.Length; i++)
+            JointAngles = new float[4];
+            ToolCenterPointPosition = new float[3];
+            DirectionToTarget = new float[3];
+            TargetOrientationOneHot = new float[2];
+        }
+    }
+}
+```
+
+### CommandModel.cs
+```csharp
+using RobotSimulation.Enums;
+
+namespace RobotSimulation.Models
+{
+    [System.Serializable]
+    public sealed class CommandModel
+    {
+        public string Type { get; set; }
+        public float[] Actions { get; set; }
+        public float GripperCloseValue { get; set; }
+        public bool SimulationModeEnabled { get; set; }
+
+        public CommandType GetCommandType()
+        {
+            switch (Type)
             {
-                var drive = joints[i].xDrive;
-                float currentTarget = drive.target;
-                float newTarget = Mathf.MoveTowards(
-                    currentTarget,
-                    targetAngles[i],
-                    maxServoSpeed * Time.fixedDeltaTime
-                );
-                drive.target = newTarget;
-                drive.stiffness = pidStiffness;
-                drive.damping = pidDamping;
-                joints[i].xDrive = drive;
+                case "STEP":
+                    return CommandType.Step;
+                case "RESET":
+                    return CommandType.Reset;
+                case "CONFIG":
+                    return CommandType.Configuration;
+                default:
+                    return CommandType.Step;
             }
         }
     }
-
-    // ═══════════════════════════════════════════════════════════════
-    // GRIPPER CONTROL
-    // ═══════════════════════════════════════════════════════════════
-    public void SetGripper(bool closed)
-    {
-        float target = closed ? 0f : 0.05f; // meters
-
-        var driveL = gripperLeft.xDrive;
-        var driveR = gripperRight.xDrive;
-        driveL.target = target;
-        driveR.target = target;
-        gripperLeft.xDrive = driveL;
-        gripperRight.xDrive = driveR;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // STATE RETRIEVAL
-    // ═══════════════════════════════════════════════════════════════
-    public RobotState GetState()
-    {
-        return new RobotState
-        {
-            jointAngles = GetJointAngles(),
-            tcpPosition = tcp.position,
-            tcpRotation = tcp.rotation,
-            gripperOpen = GetGripperState(),
-            isGripping = CheckGripping()
-        };
-    }
-
-    public float[] GetJointAngles()
-    {
-        float[] angles = new float[4];
-        for (int i = 0; i < joints.Length; i++)
-        {
-            angles[i] = joints[i].jointPosition[0] * Mathf.Rad2Deg;
-        }
-        return angles;
-    }
-
-    // ═══════════════════════════════════════════════════════════════
-    // COLLISION HANDLING
-    // ═══════════════════════════════════════════════════════════════
-    [HideInInspector] public bool collisionDetected = false;
-    [HideInInspector] public string collisionTag = "";
-
-    void OnCollisionEnter(Collision collision)
-    {
-        if (!collision.gameObject.CompareTag("Target"))
-        {
-            collisionDetected = true;
-            collisionTag = collision.gameObject.tag;
-        }
-    }
-
-    public void ResetCollisionFlag()
-    {
-        collisionDetected = false;
-        collisionTag = "";
-    }
-}
-
-[System.Serializable]
-public struct RobotState
-{
-    public float[] jointAngles;
-    public Vector3 tcpPosition;
-    public Quaternion tcpRotation;
-    public float gripperOpen;
-    public bool isGripping;
 }
 ```
 
-#### Self-Collision Configuration
-
+### ConfigurationModel.cs
 ```csharp
-// In Awake() or Start()
-void ConfigureSelfCollision()
-{
-    // Disable collisions between adjacent robot segments
-    Collider[] allColliders = GetComponentsInChildren<Collider>();
-    for (int i = 0; i < allColliders.Length - 1; i++)
-    {
-        Physics.IgnoreCollision(allColliders[i], allColliders[i + 1], true);
-    }
-}
-```
-
-### 2.3 Communication Bridge (ZMQ in C#)
-
-**Library:** NetMQ (ZeroMQ port for .NET)
-
-#### ZMQServer.cs
-
-```csharp
-using NetMQ;
-using NetMQ.Sockets;
 using UnityEngine;
-using System.Threading;
-using System.Collections.Concurrent;
-using Newtonsoft.Json;
 
-public class ZMQServer : MonoBehaviour
+namespace RobotSimulation.Models
 {
-    [Header("Network Settings")]
-    public string address = "tcp://*:5555";
-
-    [Header("References")]
-    public RobotController robot;
-    public TargetSpawner targetSpawner;
-    public LaserSensor laserSensor;
-
-    private ResponseSocket server;
-    private Thread serverThread;
-    private ConcurrentQueue<string> requestQueue = new ConcurrentQueue<string>();
-    private ConcurrentQueue<string> responseQueue = new ConcurrentQueue<string>();
-    private bool isRunning = false;
-
-    void Start()
+    [System.Serializable]
+    public sealed class ConfigurationModel
     {
-        Time.fixedDeltaTime = 0.02f; // 50Hz physics
-        StartServer();
-    }
+        [SerializeField] private float _maximumServoSpeedDegreesPerSecond;
+        [SerializeField] private float _articulationDriveStiffness;
+        [SerializeField] private float _articulationDriveDamping;
+        [SerializeField] private float _physicsTimeStepSeconds;
+        [SerializeField] private int _networkPortNumber;
+        [SerializeField] private float _gripperClosedPositionMeters;
+        [SerializeField] private float _gripperOpenPositionMeters;
 
-    void StartServer()
-    {
-        isRunning = true;
-        serverThread = new Thread(ServerLoop);
-        serverThread.Start();
-        Debug.Log($"ZMQ Server started on {address}");
-    }
-
-    void ServerLoop()
-    {
-        AsyncIO.ForceDotNet.Force();
-        using (server = new ResponseSocket())
+        public float MaximumServoSpeedDegreesPerSecond
         {
-            server.Bind(address);
+            get { return _maximumServoSpeedDegreesPerSecond; }
+            set { _maximumServoSpeedDegreesPerSecond = value; }
+        }
 
-            while (isRunning)
+        public float ArticulationDriveStiffness
+        {
+            get { return _articulationDriveStiffness; }
+            set { _articulationDriveStiffness = value; }
+        }
+
+        public float ArticulationDriveDamping
+        {
+            get { return _articulationDriveDamping; }
+            set { _articulationDriveDamping = value; }
+        }
+
+        public float PhysicsTimeStepSeconds
+        {
+            get { return _physicsTimeStepSeconds; }
+            set { _physicsTimeStepSeconds = value; }
+        }
+
+        public int NetworkPortNumber
+        {
+            get { return _networkPortNumber; }
+            set { _networkPortNumber = value; }
+        }
+
+        public float GripperClosedPositionMeters
+        {
+            get { return _gripperClosedPositionMeters; }
+            set { _gripperClosedPositionMeters = value; }
+        }
+
+        public float GripperOpenPositionMeters
+        {
+            get { return _gripperOpenPositionMeters; }
+            set { _gripperOpenPositionMeters = value; }
+        }
+
+        public static ConfigurationModel CreateDefault()
+        {
+            return new ConfigurationModel
             {
-                if (server.TryReceiveFrameString(System.TimeSpan.FromMilliseconds(100), out string request))
+                _maximumServoSpeedDegreesPerSecond = 90.0f,
+                _articulationDriveStiffness = 10000.0f,
+                _articulationDriveDamping = 100.0f,
+                _physicsTimeStepSeconds = 0.02f,
+                _networkPortNumber = 5555,
+                _gripperClosedPositionMeters = 0.0f,
+                _gripperOpenPositionMeters = 0.05f
+            };
+        }
+    }
+}
+```
+
+---
+
+## 5. Unity Code - Service Interfaces
+
+### IRobotService.cs
+```csharp
+using RobotSimulation.Enums;
+using RobotSimulation.Models;
+
+namespace RobotSimulation.Services.Interfaces
+{
+    public interface IRobotService
+    {
+        RobotControlMode CurrentControlMode { get; }
+
+        void Initialize(ConfigurationModel configuration);
+        void SetJointPositionsInstantaneous(float[] anglesInDegrees);
+        void SetJointPositionsInterpolated(float[] anglesInDegrees);
+        void SetGripperState(bool shouldClose);
+        RobotStateModel GetCurrentState();
+        float[] GetCurrentJointAngles();
+        void ResetToHomePosition();
+        void UpdatePhysicsStep();
+    }
+}
+```
+
+### INetworkService.cs
+```csharp
+using System;
+using RobotSimulation.Models;
+
+namespace RobotSimulation.Services.Interfaces
+{
+    public interface INetworkService
+    {
+        bool IsConnected { get; }
+
+        event Action<CommandModel> OnCommandReceived;
+
+        void Initialize(int portNumber);
+        void SendObservation(ObservationModel observation);
+        void Shutdown();
+        bool TryReceiveCommand(out CommandModel command);
+        void SendResponse(string jsonResponse);
+    }
+}
+```
+
+### ISensorService.cs
+```csharp
+namespace RobotSimulation.Services.Interfaces
+{
+    public interface ISensorService
+    {
+        bool HasDetectedObject { get; }
+        float DetectedDistance { get; }
+        string DetectedObjectTag { get; }
+
+        void Initialize(UnityEngine.Transform sensorOrigin, float maximumRange);
+        void PerformSensorUpdate();
+    }
+}
+```
+
+### ITargetService.cs
+```csharp
+using UnityEngine;
+
+namespace RobotSimulation.Services.Interfaces
+{
+    public interface ITargetService
+    {
+        Transform CurrentTargetTransform { get; }
+        bool IsTargetOrientationVertical { get; }
+
+        void Initialize(GameObject targetPrefab, Transform robotBaseTransform);
+        void SpawnNewRandomTarget();
+        void DestroyCurrentTarget();
+    }
+}
+```
+
+---
+
+## 6. Unity Code - Service Implementations
+
+### RobotService.cs
+```csharp
+using UnityEngine;
+using RobotSimulation.Enums;
+using RobotSimulation.Models;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Services
+{
+    public sealed class RobotService : IRobotService
+    {
+        private readonly ArticulationBody[] _jointArticulationBodies;
+        private readonly ArticulationBody _gripperLeftArticulationBody;
+        private readonly ArticulationBody _gripperRightArticulationBody;
+        private readonly Transform _toolCenterPointTransform;
+
+        private ConfigurationModel _configuration;
+        private RobotControlMode _currentControlMode;
+        private float[] _targetJointAngles;
+
+        public RobotControlMode CurrentControlMode
+        {
+            get { return _currentControlMode; }
+        }
+
+        public RobotService(
+            ArticulationBody[] jointBodies,
+            ArticulationBody gripperLeft,
+            ArticulationBody gripperRight,
+            Transform toolCenterPoint)
+        {
+            _jointArticulationBodies = jointBodies;
+            _gripperLeftArticulationBody = gripperLeft;
+            _gripperRightArticulationBody = gripperRight;
+            _toolCenterPointTransform = toolCenterPoint;
+            _targetJointAngles = new float[4];
+            _currentControlMode = RobotControlMode.Training;
+        }
+
+        public void Initialize(ConfigurationModel configuration)
+        {
+            _configuration = configuration;
+            ConfigureArticulationDrives();
+        }
+
+        public void SetJointPositionsInstantaneous(float[] anglesInDegrees)
+        {
+            for (int jointIndex = 0; jointIndex < _jointArticulationBodies.Length; jointIndex++)
+            {
+                ArticulationDrive articulationDrive = _jointArticulationBodies[jointIndex].xDrive;
+                articulationDrive.target = anglesInDegrees[jointIndex];
+                _jointArticulationBodies[jointIndex].xDrive = articulationDrive;
+
+                ArticulationReducedSpace jointPosition = new ArticulationReducedSpace(
+                    anglesInDegrees[jointIndex] * Mathf.Deg2Rad);
+                _jointArticulationBodies[jointIndex].jointPosition = jointPosition;
+            }
+        }
+
+        public void SetJointPositionsInterpolated(float[] anglesInDegrees)
+        {
+            for (int jointIndex = 0; jointIndex < anglesInDegrees.Length; jointIndex++)
+            {
+                _targetJointAngles[jointIndex] = anglesInDegrees[jointIndex];
+            }
+        }
+
+        public void SetGripperState(bool shouldClose)
+        {
+            float targetPosition = shouldClose
+                ? _configuration.GripperClosedPositionMeters
+                : _configuration.GripperOpenPositionMeters;
+
+            ArticulationDrive leftGripperDrive = _gripperLeftArticulationBody.xDrive;
+            ArticulationDrive rightGripperDrive = _gripperRightArticulationBody.xDrive;
+
+            leftGripperDrive.target = targetPosition;
+            rightGripperDrive.target = targetPosition;
+
+            _gripperLeftArticulationBody.xDrive = leftGripperDrive;
+            _gripperRightArticulationBody.xDrive = rightGripperDrive;
+        }
+
+        public RobotStateModel GetCurrentState()
+        {
+            RobotStateModel stateModel = new RobotStateModel
+            {
+                JointAngles = GetCurrentJointAngles(),
+                ToolCenterPointPosition = _toolCenterPointTransform.position,
+                ToolCenterPointRotation = _toolCenterPointTransform.rotation,
+                GripperOpenPercentage = GetGripperOpenPercentage(),
+                IsGrippingObject = CheckIsGrippingObject()
+            };
+
+            return stateModel;
+        }
+
+        public float[] GetCurrentJointAngles()
+        {
+            float[] currentAngles = new float[_jointArticulationBodies.Length];
+
+            for (int jointIndex = 0; jointIndex < _jointArticulationBodies.Length; jointIndex++)
+            {
+                float angleInRadians = _jointArticulationBodies[jointIndex].jointPosition[0];
+                currentAngles[jointIndex] = angleInRadians * Mathf.Rad2Deg;
+            }
+
+            return currentAngles;
+        }
+
+        public void ResetToHomePosition()
+        {
+            float[] homeAngles = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+            SetJointPositionsInstantaneous(homeAngles);
+            SetGripperState(false);
+        }
+
+        public void UpdatePhysicsStep()
+        {
+            if (_currentControlMode != RobotControlMode.Simulation)
+            {
+                return;
+            }
+
+            for (int jointIndex = 0; jointIndex < _jointArticulationBodies.Length; jointIndex++)
+            {
+                ArticulationDrive articulationDrive = _jointArticulationBodies[jointIndex].xDrive;
+
+                float interpolatedTarget = Mathf.MoveTowards(
+                    articulationDrive.target,
+                    _targetJointAngles[jointIndex],
+                    _configuration.MaximumServoSpeedDegreesPerSecond * Time.fixedDeltaTime);
+
+                articulationDrive.target = interpolatedTarget;
+                articulationDrive.stiffness = _configuration.ArticulationDriveStiffness;
+                articulationDrive.damping = _configuration.ArticulationDriveDamping;
+
+                _jointArticulationBodies[jointIndex].xDrive = articulationDrive;
+            }
+        }
+
+        public void SetControlMode(RobotControlMode controlMode)
+        {
+            _currentControlMode = controlMode;
+        }
+
+        private void ConfigureArticulationDrives()
+        {
+            foreach (ArticulationBody jointBody in _jointArticulationBodies)
+            {
+                ArticulationDrive drive = jointBody.xDrive;
+                drive.stiffness = _configuration.ArticulationDriveStiffness;
+                drive.damping = _configuration.ArticulationDriveDamping;
+                jointBody.xDrive = drive;
+            }
+        }
+
+        private float GetGripperOpenPercentage()
+        {
+            float currentPosition = _gripperLeftArticulationBody.jointPosition[0];
+            float openPosition = _configuration.GripperOpenPositionMeters;
+            return currentPosition / openPosition;
+        }
+
+        private bool CheckIsGrippingObject()
+        {
+            return false;
+        }
+    }
+}
+```
+
+### LaserSensorService.cs
+```csharp
+using UnityEngine;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Services
+{
+    public sealed class LaserSensorService : ISensorService
+    {
+        private Transform _sensorOriginTransform;
+        private float _maximumDetectionRange;
+        private bool _hasDetectedObject;
+        private float _detectedDistance;
+        private string _detectedObjectTag;
+
+        public bool HasDetectedObject
+        {
+            get { return _hasDetectedObject; }
+        }
+
+        public float DetectedDistance
+        {
+            get { return _detectedDistance; }
+        }
+
+        public string DetectedObjectTag
+        {
+            get { return _detectedObjectTag; }
+        }
+
+        public void Initialize(Transform sensorOrigin, float maximumRange)
+        {
+            _sensorOriginTransform = sensorOrigin;
+            _maximumDetectionRange = maximumRange;
+            _hasDetectedObject = false;
+            _detectedDistance = maximumRange;
+            _detectedObjectTag = string.Empty;
+        }
+
+        public void PerformSensorUpdate()
+        {
+            Ray sensorRay = new Ray(
+                _sensorOriginTransform.position,
+                _sensorOriginTransform.forward);
+
+            RaycastHit raycastHitInfo;
+            bool raycastDidHit = Physics.Raycast(
+                sensorRay,
+                out raycastHitInfo,
+                _maximumDetectionRange);
+
+            if (raycastDidHit)
+            {
+                _hasDetectedObject = true;
+                _detectedDistance = raycastHitInfo.distance;
+                _detectedObjectTag = raycastHitInfo.collider.tag;
+            }
+            else
+            {
+                _hasDetectedObject = false;
+                _detectedDistance = _maximumDetectionRange;
+                _detectedObjectTag = string.Empty;
+            }
+        }
+    }
+}
+```
+
+### RandomTargetService.cs
+```csharp
+using UnityEngine;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Services
+{
+    public sealed class RandomTargetService : ITargetService
+    {
+        private GameObject _targetPrefab;
+        private Transform _robotBaseTransform;
+        private GameObject _currentTargetInstance;
+        private bool _isCurrentTargetVertical;
+
+        private const float MINIMUM_SPAWN_RADIUS = 0.2f;
+        private const float MAXIMUM_SPAWN_RADIUS = 0.5f;
+        private const float MINIMUM_SPAWN_HEIGHT = 0.1f;
+        private const float MAXIMUM_SPAWN_HEIGHT = 0.4f;
+        private const string TARGET_TAG = "Target";
+
+        public Transform CurrentTargetTransform
+        {
+            get
+            {
+                if (_currentTargetInstance == null)
                 {
-                    requestQueue.Enqueue(request);
+                    return null;
+                }
+                return _currentTargetInstance.transform;
+            }
+        }
 
-                    // Wait for response from main thread
-                    while (!responseQueue.TryDequeue(out string response))
-                    {
-                        Thread.Sleep(1);
-                        if (!isRunning) return;
-                    }
+        public bool IsTargetOrientationVertical
+        {
+            get { return _isCurrentTargetVertical; }
+        }
 
-                    server.SendFrame(response);
+        public void Initialize(GameObject targetPrefab, Transform robotBaseTransform)
+        {
+            _targetPrefab = targetPrefab;
+            _robotBaseTransform = robotBaseTransform;
+        }
+
+        public void SpawnNewRandomTarget()
+        {
+            DestroyCurrentTarget();
+
+            Vector3 spawnPosition = CalculateRandomSpawnPosition();
+            Quaternion spawnRotation = CalculateRandomSpawnRotation();
+
+            _currentTargetInstance = Object.Instantiate(
+                _targetPrefab,
+                spawnPosition,
+                spawnRotation);
+            _currentTargetInstance.tag = TARGET_TAG;
+        }
+
+        public void DestroyCurrentTarget()
+        {
+            if (_currentTargetInstance != null)
+            {
+                Object.Destroy(_currentTargetInstance);
+                _currentTargetInstance = null;
+            }
+        }
+
+        private Vector3 CalculateRandomSpawnPosition()
+        {
+            float randomAngleRadians = Random.Range(0.0f, 360.0f) * Mathf.Deg2Rad;
+            float randomRadius = Random.Range(MINIMUM_SPAWN_RADIUS, MAXIMUM_SPAWN_RADIUS);
+            float randomHeight = Random.Range(MINIMUM_SPAWN_HEIGHT, MAXIMUM_SPAWN_HEIGHT);
+
+            Vector3 offsetFromBase = new Vector3(
+                Mathf.Cos(randomAngleRadians) * randomRadius,
+                randomHeight,
+                Mathf.Sin(randomAngleRadians) * randomRadius);
+
+            return _robotBaseTransform.position + offsetFromBase;
+        }
+
+        private Quaternion CalculateRandomSpawnRotation()
+        {
+            _isCurrentTargetVertical = Random.value > 0.5f;
+
+            if (_isCurrentTargetVertical)
+            {
+                return Quaternion.identity;
+            }
+
+            float randomYRotation = Random.Range(0.0f, 360.0f);
+            return Quaternion.Euler(90.0f, randomYRotation, 0.0f);
+        }
+    }
+}
+```
+
+---
+
+## 7. Unity Code - Events
+
+### CollisionEvents.cs
+```csharp
+using System;
+using RobotSimulation.Enums;
+
+namespace RobotSimulation.Events
+{
+    public static class CollisionEvents
+    {
+        public static event Action<CollisionType, string> OnCollisionDetected;
+
+        public static void RaiseCollisionDetected(CollisionType collisionType, string collidedObjectTag)
+        {
+            if (OnCollisionDetected != null)
+            {
+                OnCollisionDetected.Invoke(collisionType, collidedObjectTag);
+            }
+        }
+    }
+}
+```
+
+### RobotEvents.cs
+```csharp
+using System;
+using RobotSimulation.Models;
+
+namespace RobotSimulation.Events
+{
+    public static class RobotEvents
+    {
+        public static event Action<RobotStateModel> OnRobotStateChanged;
+        public static event Action OnRobotResetCompleted;
+
+        public static void RaiseRobotStateChanged(RobotStateModel newState)
+        {
+            if (OnRobotStateChanged != null)
+            {
+                OnRobotStateChanged.Invoke(newState);
+            }
+        }
+
+        public static void RaiseRobotResetCompleted()
+        {
+            if (OnRobotResetCompleted != null)
+            {
+                OnRobotResetCompleted.Invoke();
+            }
+        }
+    }
+}
+```
+
+---
+
+## 8. Unity Code - Controllers
+
+### RobotController.cs
+```csharp
+using UnityEngine;
+using RobotSimulation.Enums;
+using RobotSimulation.Events;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Controllers
+{
+    public sealed class RobotController : MonoBehaviour
+    {
+        [Header("Articulation Body References")]
+        [SerializeField] private ArticulationBody _rootArticulationBody;
+        [SerializeField] private ArticulationBody[] _jointArticulationBodies;
+        [SerializeField] private ArticulationBody _gripperLeftArticulationBody;
+        [SerializeField] private ArticulationBody _gripperRightArticulationBody;
+        [SerializeField] private Transform _toolCenterPointTransform;
+
+        private IRobotService _robotService;
+        private bool _collisionDetectedThisFrame;
+        private CollisionType _lastCollisionType;
+
+        public IRobotService RobotService
+        {
+            get { return _robotService; }
+        }
+
+        public bool CollisionDetectedThisFrame
+        {
+            get { return _collisionDetectedThisFrame; }
+        }
+
+        public CollisionType LastCollisionType
+        {
+            get { return _lastCollisionType; }
+        }
+
+        public void InitializeController(IRobotService robotService)
+        {
+            _robotService = robotService;
+            _collisionDetectedThisFrame = false;
+            _lastCollisionType = CollisionType.None;
+
+            ConfigureSelfCollisionIgnoring();
+            SubscribeToEvents();
+        }
+
+        public void PerformFixedUpdate()
+        {
+            _robotService.UpdatePhysicsStep();
+        }
+
+        public void ResetCollisionState()
+        {
+            _collisionDetectedThisFrame = false;
+            _lastCollisionType = CollisionType.None;
+        }
+
+        public ArticulationBody[] GetJointArticulationBodies()
+        {
+            return _jointArticulationBodies;
+        }
+
+        public ArticulationBody GetGripperLeftArticulationBody()
+        {
+            return _gripperLeftArticulationBody;
+        }
+
+        public ArticulationBody GetGripperRightArticulationBody()
+        {
+            return _gripperRightArticulationBody;
+        }
+
+        public Transform GetToolCenterPointTransform()
+        {
+            return _toolCenterPointTransform;
+        }
+
+        private void OnCollisionEnter(Collision collisionInfo)
+        {
+            string collidedObjectTag = collisionInfo.gameObject.tag;
+            CollisionType detectedCollisionType = DetermineCollisionType(collidedObjectTag);
+
+            if (detectedCollisionType == CollisionType.Environment)
+            {
+                _collisionDetectedThisFrame = true;
+                _lastCollisionType = detectedCollisionType;
+                CollisionEvents.RaiseCollisionDetected(detectedCollisionType, collidedObjectTag);
+            }
+        }
+
+        private CollisionType DetermineCollisionType(string objectTag)
+        {
+            if (objectTag == "Target")
+            {
+                return CollisionType.Target;
+            }
+
+            return CollisionType.Environment;
+        }
+
+        private void ConfigureSelfCollisionIgnoring()
+        {
+            Collider[] allColliders = GetComponentsInChildren<Collider>();
+
+            for (int firstIndex = 0; firstIndex < allColliders.Length; firstIndex++)
+            {
+                for (int secondIndex = firstIndex + 1; secondIndex < allColliders.Length; secondIndex++)
+                {
+                    Physics.IgnoreCollision(allColliders[firstIndex], allColliders[secondIndex], true);
                 }
             }
         }
-        NetMQConfig.Cleanup();
-    }
 
-    void FixedUpdate()
-    {
-        if (requestQueue.TryDequeue(out string request))
+        private void SubscribeToEvents()
         {
-            string response = ProcessRequest(request);
-            responseQueue.Enqueue(response);
-        }
-    }
-
-    string ProcessRequest(string jsonRequest)
-    {
-        try
-        {
-            var cmd = JsonConvert.DeserializeObject<Command>(jsonRequest);
-
-            switch (cmd.type)
-            {
-                case "STEP":
-                    return HandleStep(cmd);
-                case "RESET":
-                    return HandleReset(cmd);
-                case "CONFIG":
-                    return HandleConfig(cmd);
-                default:
-                    return CreateErrorResponse($"Unknown command: {cmd.type}");
-            }
-        }
-        catch (System.Exception e)
-        {
-            return CreateErrorResponse(e.Message);
-        }
-    }
-
-    string HandleStep(Command cmd)
-    {
-        // Apply actions to robot
-        float[] deltaAngles = cmd.actions;
-        float[] currentAngles = robot.GetJointAngles();
-        float[] newAngles = new float[4];
-
-        for (int i = 0; i < 4; i++)
-        {
-            newAngles[i] = currentAngles[i] + deltaAngles[i];
         }
 
-        if (robot.mode == RobotController.ControlMode.Training)
-            robot.SetJointPositionsInstant(newAngles);
-        else
-            robot.SetJointPositionsSmooth(newAngles);
-
-        // Gripper action
-        robot.SetGripper(cmd.gripperClose > 0.5f);
-
-        // Build observation response
-        var obs = BuildObservation();
-        return JsonConvert.SerializeObject(obs);
-    }
-
-    string HandleReset(Command cmd)
-    {
-        // Reset robot to home position
-        robot.SetJointPositionsInstant(new float[] { 0, 0, 0, 0 });
-        robot.SetGripper(false);
-        robot.ResetCollisionFlag();
-
-        // Spawn new target
-        targetSpawner.SpawnRandomTarget();
-
-        var obs = BuildObservation();
-        obs.reset = true;
-        return JsonConvert.SerializeObject(obs);
-    }
-
-    string HandleConfig(Command cmd)
-    {
-        // Set control mode
-        if (cmd.simulationMode)
-            robot.mode = RobotController.ControlMode.Simulation;
-        else
-            robot.mode = RobotController.ControlMode.Training;
-
-        return JsonConvert.SerializeObject(new { status = "ok" });
-    }
-
-    Observation BuildObservation()
-    {
-        var state = robot.GetState();
-        var targetPos = targetSpawner.currentTarget.position;
-        var laserData = laserSensor.GetData();
-
-        return new Observation
+        private void OnDestroy()
         {
-            jointAngles = state.jointAngles,
-            tcpPosition = Vec3ToArray(state.tcpPosition),
-            directionToTarget = Vec3ToArray((targetPos - state.tcpPosition).normalized),
-            distanceToTarget = Vector3.Distance(state.tcpPosition, targetPos),
-            gripperState = state.gripperOpen,
-            isGripping = state.isGripping,
-            laserHit = laserData.hit,
-            laserDistance = laserData.distance,
-            collision = robot.collisionDetected,
-            targetOrientation = targetSpawner.isVertical ? new float[]{1,0} : new float[]{0,1}
-        };
+        }
     }
-
-    float[] Vec3ToArray(Vector3 v) => new float[] { v.x, v.y, v.z };
-
-    string CreateErrorResponse(string message)
-    {
-        return JsonConvert.SerializeObject(new { error = message });
-    }
-
-    void OnDestroy()
-    {
-        isRunning = false;
-        serverThread?.Join(1000);
-    }
-}
-
-// ═══════════════════════════════════════════════════════════════
-// DATA STRUCTURES
-// ═══════════════════════════════════════════════════════════════
-
-[System.Serializable]
-public class Command
-{
-    public string type;           // "STEP", "RESET", "CONFIG"
-    public float[] actions;       // [delta1, delta2, delta3, delta4]
-    public float gripperClose;    // 0-1
-    public bool simulationMode;   // for CONFIG
-}
-
-[System.Serializable]
-public class Observation
-{
-    public float[] jointAngles;
-    public float[] tcpPosition;
-    public float[] directionToTarget;
-    public float distanceToTarget;
-    public float gripperState;
-    public bool isGripping;
-    public bool laserHit;
-    public float laserDistance;
-    public bool collision;
-    public float[] targetOrientation; // one-hot: [vertical, horizontal]
-    public bool reset;
 }
 ```
 
-### 2.4 Target Spawner
-
+### SensorController.cs
 ```csharp
-public class TargetSpawner : MonoBehaviour
+using UnityEngine;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Controllers
 {
-    [Header("Spawn Configuration")]
-    public GameObject targetPrefab;
-    public Transform robotBase;
-    public float minRadius = 0.2f;
-    public float maxRadius = 0.5f;
-    public float minHeight = 0.1f;
-    public float maxHeight = 0.4f;
-
-    [HideInInspector] public Transform currentTarget;
-    [HideInInspector] public bool isVertical;
-
-    public void SpawnRandomTarget()
+    public sealed class SensorController : MonoBehaviour
     {
-        if (currentTarget != null)
-            Destroy(currentTarget.gameObject);
+        [Header("Sensor Configuration")]
+        [SerializeField] private Transform _sensorOriginTransform;
+        [SerializeField] private float _maximumDetectionRangeMeters = 1.0f;
 
-        // Random position in hemisphere
-        float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
-        float radius = Random.Range(minRadius, maxRadius);
-        float height = Random.Range(minHeight, maxHeight);
+        private ISensorService _sensorService;
 
-        Vector3 pos = robotBase.position + new Vector3(
-            Mathf.Cos(angle) * radius,
-            height,
-            Mathf.Sin(angle) * radius
-        );
+        public ISensorService SensorService
+        {
+            get { return _sensorService; }
+        }
 
-        // Random orientation
-        isVertical = Random.value > 0.5f;
-        Quaternion rot = isVertical
-            ? Quaternion.identity
-            : Quaternion.Euler(90, Random.Range(0, 360), 0);
+        public void InitializeController(ISensorService sensorService)
+        {
+            _sensorService = sensorService;
+            _sensorService.Initialize(_sensorOriginTransform, _maximumDetectionRangeMeters);
+        }
 
-        var obj = Instantiate(targetPrefab, pos, rot);
-        obj.tag = "Target";
-        currentTarget = obj.transform;
+        public void PerformFixedUpdate()
+        {
+            _sensorService.PerformSensorUpdate();
+        }
+
+        public Transform GetSensorOriginTransform()
+        {
+            return _sensorOriginTransform;
+        }
+
+        public float GetMaximumDetectionRange()
+        {
+            return _maximumDetectionRangeMeters;
+        }
+    }
+}
+```
+
+### TargetController.cs
+```csharp
+using UnityEngine;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Controllers
+{
+    public sealed class TargetController : MonoBehaviour
+    {
+        [Header("Target Configuration")]
+        [SerializeField] private GameObject _targetPrefab;
+        [SerializeField] private Transform _robotBaseTransform;
+
+        private ITargetService _targetService;
+
+        public ITargetService TargetService
+        {
+            get { return _targetService; }
+        }
+
+        public void InitializeController(ITargetService targetService)
+        {
+            _targetService = targetService;
+            _targetService.Initialize(_targetPrefab, _robotBaseTransform);
+        }
+
+        public GameObject GetTargetPrefab()
+        {
+            return _targetPrefab;
+        }
+
+        public Transform GetRobotBaseTransform()
+        {
+            return _robotBaseTransform;
+        }
     }
 }
 ```
 
 ---
 
-## 3. Python Layer (RL & Control)
+## 9. Unity Code - Network Service (ZeroMQ)
 
-### 3.1 Technology Stack
+### ZeroMQNetworkService.cs
+```csharp
+using System;
+using System.Threading;
+using System.Collections.Concurrent;
+using NetMQ;
+using NetMQ.Sockets;
+using Newtonsoft.Json;
+using RobotSimulation.Models;
+using RobotSimulation.Services.Interfaces;
 
-| Component | Library | Reason |
-|-----------|---------|--------|
-| RL Environment | Gymnasium | Standard RL API, custom env support |
-| RL Algorithm | PPO (Proximal Policy Optimization) | Stability with continuous actions |
-| RL Library | Stable Baselines3 | Production-ready implementations |
-| UI Panel | CustomTkinter | Non-blocking UI integration |
-| Communication | pyzmq | ZeroMQ Python bindings |
+namespace RobotSimulation.Services
+{
+    public sealed class ZeroMQNetworkService : INetworkService
+    {
+        private ResponseSocket _responseSocket;
+        private Thread _networkThread;
+        private ConcurrentQueue<string> _incomingRequestQueue;
+        private ConcurrentQueue<string> _outgoingResponseQueue;
+        private volatile bool _isRunning;
+        private int _portNumber;
 
-### 3.2 Gymnasium Environment Definition
+        public bool IsConnected
+        {
+            get { return _isRunning; }
+        }
 
-#### UnityRobotEnv.py
+        public event Action<CommandModel> OnCommandReceived;
 
+        public ZeroMQNetworkService()
+        {
+            _incomingRequestQueue = new ConcurrentQueue<string>();
+            _outgoingResponseQueue = new ConcurrentQueue<string>();
+            _isRunning = false;
+        }
+
+        public void Initialize(int portNumber)
+        {
+            _portNumber = portNumber;
+            _isRunning = true;
+            _networkThread = new Thread(ExecuteNetworkLoop);
+            _networkThread.IsBackground = true;
+            _networkThread.Start();
+        }
+
+        public void SendObservation(ObservationModel observation)
+        {
+            string serializedObservation = JsonConvert.SerializeObject(observation);
+            _outgoingResponseQueue.Enqueue(serializedObservation);
+        }
+
+        public void Shutdown()
+        {
+            _isRunning = false;
+
+            if (_networkThread != null && _networkThread.IsAlive)
+            {
+                _networkThread.Join(1000);
+            }
+        }
+
+        public bool TryReceiveCommand(out CommandModel command)
+        {
+            command = null;
+            string requestJson;
+
+            if (_incomingRequestQueue.TryDequeue(out requestJson))
+            {
+                command = JsonConvert.DeserializeObject<CommandModel>(requestJson);
+                return true;
+            }
+
+            return false;
+        }
+
+        public void SendResponse(string jsonResponse)
+        {
+            _outgoingResponseQueue.Enqueue(jsonResponse);
+        }
+
+        private void ExecuteNetworkLoop()
+        {
+            AsyncIO.ForceDotNet.Force();
+
+            using (_responseSocket = new ResponseSocket())
+            {
+                string bindAddress = string.Format("tcp://*:{0}", _portNumber);
+                _responseSocket.Bind(bindAddress);
+
+                while (_isRunning)
+                {
+                    string receivedRequest;
+                    bool didReceiveRequest = _responseSocket.TryReceiveFrameString(
+                        TimeSpan.FromMilliseconds(100),
+                        out receivedRequest);
+
+                    if (didReceiveRequest)
+                    {
+                        _incomingRequestQueue.Enqueue(receivedRequest);
+                        WaitForAndSendResponse();
+                    }
+                }
+            }
+
+            NetMQConfig.Cleanup();
+        }
+
+        private void WaitForAndSendResponse()
+        {
+            string responseToSend;
+
+            while (!_outgoingResponseQueue.TryDequeue(out responseToSend))
+            {
+                Thread.Sleep(1);
+
+                if (!_isRunning)
+                {
+                    return;
+                }
+            }
+
+            _responseSocket.SendFrame(responseToSend);
+        }
+    }
+}
+```
+
+---
+
+## 10. Unity Code - GameManager (Bootstrap)
+
+### GameManager.cs
+```csharp
+using UnityEngine;
+using Newtonsoft.Json;
+using RobotSimulation.Controllers;
+using RobotSimulation.Enums;
+using RobotSimulation.Events;
+using RobotSimulation.Models;
+using RobotSimulation.Services;
+using RobotSimulation.Services.Interfaces;
+
+namespace RobotSimulation.Bootstrap
+{
+    public sealed class GameManager : MonoBehaviour
+    {
+        [Header("Controller References")]
+        [SerializeField] private RobotController _robotController;
+        [SerializeField] private SensorController _sensorController;
+        [SerializeField] private TargetController _targetController;
+
+        [Header("Configuration")]
+        [SerializeField] private int _networkPortNumber = 5555;
+        [SerializeField] private float _physicsTimeStep = 0.02f;
+
+        private IRobotService _robotService;
+        private INetworkService _networkService;
+        private ISensorService _sensorService;
+        private ITargetService _targetService;
+        private ConfigurationModel _configuration;
+        private RobotControlMode _currentControlMode;
+
+        private void Awake()
+        {
+            InitializeConfiguration();
+            InitializeServices();
+            InitializeControllers();
+            SubscribeToEvents();
+        }
+
+        private void FixedUpdate()
+        {
+            ProcessNetworkCommands();
+            UpdateControllers();
+        }
+
+        private void OnDestroy()
+        {
+            ShutdownServices();
+            UnsubscribeFromEvents();
+        }
+
+        private void InitializeConfiguration()
+        {
+            Time.fixedDeltaTime = _physicsTimeStep;
+            _configuration = ConfigurationModel.CreateDefault();
+            _configuration.NetworkPortNumber = _networkPortNumber;
+            _configuration.PhysicsTimeStepSeconds = _physicsTimeStep;
+            _currentControlMode = RobotControlMode.Training;
+        }
+
+        private void InitializeServices()
+        {
+            _robotService = new RobotService(
+                _robotController.GetJointArticulationBodies(),
+                _robotController.GetGripperLeftArticulationBody(),
+                _robotController.GetGripperRightArticulationBody(),
+                _robotController.GetToolCenterPointTransform());
+            _robotService.Initialize(_configuration);
+
+            _sensorService = new LaserSensorService();
+
+            _targetService = new RandomTargetService();
+
+            _networkService = new ZeroMQNetworkService();
+            _networkService.Initialize(_configuration.NetworkPortNumber);
+        }
+
+        private void InitializeControllers()
+        {
+            _robotController.InitializeController(_robotService);
+            _sensorController.InitializeController(_sensorService);
+            _targetController.InitializeController(_targetService);
+        }
+
+        private void ProcessNetworkCommands()
+        {
+            CommandModel receivedCommand;
+
+            if (!_networkService.TryReceiveCommand(out receivedCommand))
+            {
+                return;
+            }
+
+            CommandType commandType = receivedCommand.GetCommandType();
+
+            switch (commandType)
+            {
+                case CommandType.Step:
+                    HandleStepCommand(receivedCommand);
+                    break;
+                case CommandType.Reset:
+                    HandleResetCommand();
+                    break;
+                case CommandType.Configuration:
+                    HandleConfigurationCommand(receivedCommand);
+                    break;
+            }
+        }
+
+        private void HandleStepCommand(CommandModel command)
+        {
+            float[] currentJointAngles = _robotService.GetCurrentJointAngles();
+            float[] newJointAngles = new float[4];
+
+            for (int jointIndex = 0; jointIndex < 4; jointIndex++)
+            {
+                newJointAngles[jointIndex] = currentJointAngles[jointIndex] + command.Actions[jointIndex];
+            }
+
+            if (_currentControlMode == RobotControlMode.Training)
+            {
+                _robotService.SetJointPositionsInstantaneous(newJointAngles);
+            }
+            else
+            {
+                _robotService.SetJointPositionsInterpolated(newJointAngles);
+            }
+
+            bool shouldCloseGripper = command.GripperCloseValue > 0.5f;
+            _robotService.SetGripperState(shouldCloseGripper);
+
+            ObservationModel observation = BuildObservationModel(false);
+            _networkService.SendObservation(observation);
+        }
+
+        private void HandleResetCommand()
+        {
+            _robotService.ResetToHomePosition();
+            _robotController.ResetCollisionState();
+            _targetService.SpawnNewRandomTarget();
+
+            ObservationModel observation = BuildObservationModel(true);
+            _networkService.SendObservation(observation);
+
+            RobotEvents.RaiseRobotResetCompleted();
+        }
+
+        private void HandleConfigurationCommand(CommandModel command)
+        {
+            if (command.SimulationModeEnabled)
+            {
+                _currentControlMode = RobotControlMode.Simulation;
+            }
+            else
+            {
+                _currentControlMode = RobotControlMode.Training;
+            }
+
+            string responseJson = JsonConvert.SerializeObject(new { status = "ok" });
+            _networkService.SendResponse(responseJson);
+        }
+
+        private ObservationModel BuildObservationModel(bool isResetFrame)
+        {
+            RobotStateModel robotState = _robotService.GetCurrentState();
+            Transform targetTransform = _targetService.CurrentTargetTransform;
+
+            Vector3 directionToTarget = Vector3.zero;
+            float distanceToTarget = 0.0f;
+
+            if (targetTransform != null)
+            {
+                directionToTarget = (targetTransform.position - robotState.ToolCenterPointPosition).normalized;
+                distanceToTarget = Vector3.Distance(robotState.ToolCenterPointPosition, targetTransform.position);
+            }
+
+            ObservationModel observation = new ObservationModel
+            {
+                JointAngles = robotState.JointAngles,
+                ToolCenterPointPosition = ConvertVector3ToFloatArray(robotState.ToolCenterPointPosition),
+                DirectionToTarget = ConvertVector3ToFloatArray(directionToTarget),
+                DistanceToTarget = distanceToTarget,
+                GripperState = robotState.GripperOpenPercentage,
+                IsGrippingObject = robotState.IsGrippingObject,
+                LaserSensorHit = _sensorService.HasDetectedObject,
+                LaserSensorDistance = _sensorService.DetectedDistance,
+                CollisionDetected = _robotController.CollisionDetectedThisFrame,
+                TargetOrientationOneHot = BuildTargetOrientationOneHot(),
+                IsResetFrame = isResetFrame
+            };
+
+            return observation;
+        }
+
+        private float[] ConvertVector3ToFloatArray(Vector3 vector)
+        {
+            return new float[] { vector.x, vector.y, vector.z };
+        }
+
+        private float[] BuildTargetOrientationOneHot()
+        {
+            if (_targetService.IsTargetOrientationVertical)
+            {
+                return new float[] { 1.0f, 0.0f };
+            }
+
+            return new float[] { 0.0f, 1.0f };
+        }
+
+        private void UpdateControllers()
+        {
+            _robotController.PerformFixedUpdate();
+            _sensorController.PerformFixedUpdate();
+        }
+
+        private void SubscribeToEvents()
+        {
+            CollisionEvents.OnCollisionDetected += HandleCollisionDetected;
+        }
+
+        private void UnsubscribeFromEvents()
+        {
+            CollisionEvents.OnCollisionDetected -= HandleCollisionDetected;
+        }
+
+        private void HandleCollisionDetected(CollisionType collisionType, string objectTag)
+        {
+        }
+
+        private void ShutdownServices()
+        {
+            if (_networkService != null)
+            {
+                _networkService.Shutdown();
+            }
+        }
+    }
+}
+```
+
+---
+
+## 11. Python Code - Type Hints and Structure
+
+### File Structure
+```
+python/
+├── models/
+│   ├── __init__.py
+│   ├── observation_model.py
+│   ├── command_model.py
+│   └── reward_components.py
+│
+├── services/
+│   ├── __init__.py
+│   ├── network_service.py
+│   └── reward_calculation_service.py
+│
+├── environments/
+│   ├── __init__.py
+│   └── unity_robot_environment.py
+│
+├── controllers/
+│   ├── __init__.py
+│   └── training_controller.py
+│
+├── enums/
+│   ├── __init__.py
+│   └── command_type.py
+│
+├── ui/
+│   ├── __init__.py
+│   └── control_panel.py
+│
+├── config.py
+├── train.py
+└── requirements.txt
+```
+
+---
+
+## 12. Python Code - Enums
+
+### enums/command_type.py
 ```python
+from enum import Enum
+
+
+class CommandType(Enum):
+    STEP = "STEP"
+    RESET = "RESET"
+    CONFIGURATION = "CONFIG"
+```
+
+---
+
+## 13. Python Code - Models
+
+### models/observation_model.py
+```python
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class ObservationModel:
+    joint_angles: List[float]
+    tool_center_point_position: List[float]
+    direction_to_target: List[float]
+    distance_to_target: float
+    gripper_state: float
+    is_gripping_object: bool
+    laser_sensor_hit: bool
+    laser_sensor_distance: float
+    collision_detected: bool
+    target_orientation_one_hot: List[float]
+    is_reset_frame: bool
+
+    @classmethod
+    def from_dictionary(cls, data: dict) -> "ObservationModel":
+        return cls(
+            joint_angles=data.get("JointAngles", [0.0, 0.0, 0.0, 0.0]),
+            tool_center_point_position=data.get("ToolCenterPointPosition", [0.0, 0.0, 0.0]),
+            direction_to_target=data.get("DirectionToTarget", [0.0, 0.0, 0.0]),
+            distance_to_target=data.get("DistanceToTarget", 0.0),
+            gripper_state=data.get("GripperState", 1.0),
+            is_gripping_object=data.get("IsGrippingObject", False),
+            laser_sensor_hit=data.get("LaserSensorHit", False),
+            laser_sensor_distance=data.get("LaserSensorDistance", 1.0),
+            collision_detected=data.get("CollisionDetected", False),
+            target_orientation_one_hot=data.get("TargetOrientationOneHot", [1.0, 0.0]),
+            is_reset_frame=data.get("IsResetFrame", False)
+        )
+```
+
+### models/command_model.py
+```python
+from dataclasses import dataclass
+from typing import List, Optional
+from enums.command_type import CommandType
+
+
+@dataclass
+class CommandModel:
+    command_type: CommandType
+    actions: Optional[List[float]] = None
+    gripper_close_value: Optional[float] = None
+    simulation_mode_enabled: Optional[bool] = None
+
+    def to_dictionary(self) -> dict:
+        result: dict = {"type": self.command_type.value}
+
+        if self.actions is not None:
+            result["actions"] = self.actions
+
+        if self.gripper_close_value is not None:
+            result["gripperClose"] = self.gripper_close_value
+
+        if self.simulation_mode_enabled is not None:
+            result["simulationMode"] = self.simulation_mode_enabled
+
+        return result
+```
+
+### models/reward_components.py
+```python
+from dataclasses import dataclass
+
+
+@dataclass
+class RewardComponents:
+    distance_reward: float = 0.0
+    alignment_reward: float = 0.0
+    grasp_reward: float = 0.0
+    collision_penalty: float = 0.0
+
+    @property
+    def total_reward(self) -> float:
+        return (
+            self.distance_reward
+            + self.alignment_reward
+            + self.grasp_reward
+            + self.collision_penalty
+        )
+```
+
+---
+
+## 14. Python Code - Services
+
+### services/network_service.py
+```python
+import json
+import zmq
+from typing import Optional
+from models.command_model import CommandModel
+from models.observation_model import ObservationModel
+
+
+class NetworkService:
+    DEFAULT_ADDRESS: str = "tcp://localhost:5555"
+    DEFAULT_TIMEOUT_MILLISECONDS: int = 5000
+
+    def __init__(self, server_address: str = DEFAULT_ADDRESS) -> None:
+        self._server_address: str = server_address
+        self._context: Optional[zmq.Context] = None
+        self._socket: Optional[zmq.Socket] = None
+        self._is_connected: bool = False
+
+    @property
+    def is_connected(self) -> bool:
+        return self._is_connected
+
+    def connect(self) -> None:
+        self._context = zmq.Context()
+        self._socket = self._context.socket(zmq.REQ)
+        self._socket.connect(self._server_address)
+        self._socket.setsockopt(zmq.RCVTIMEO, self.DEFAULT_TIMEOUT_MILLISECONDS)
+        self._is_connected = True
+
+    def disconnect(self) -> None:
+        if self._socket is not None:
+            self._socket.close()
+
+        if self._context is not None:
+            self._context.term()
+
+        self._is_connected = False
+
+    def send_command(self, command: CommandModel) -> ObservationModel:
+        command_dictionary: dict = command.to_dictionary()
+        serialized_command: str = json.dumps(command_dictionary)
+
+        self._socket.send_string(serialized_command)
+
+        response_string: str = self._socket.recv_string()
+        response_dictionary: dict = json.loads(response_string)
+
+        return ObservationModel.from_dictionary(response_dictionary)
+
+    def send_raw_command(self, command_dictionary: dict) -> dict:
+        serialized_command: str = json.dumps(command_dictionary)
+        self._socket.send_string(serialized_command)
+
+        response_string: str = self._socket.recv_string()
+        return json.loads(response_string)
+```
+
+### services/reward_calculation_service.py
+```python
+import numpy as np
+from typing import Tuple, Dict, Any
+from models.observation_model import ObservationModel
+from models.reward_components import RewardComponents
+
+
+class RewardCalculationService:
+    DISTANCE_REWARD_SCALE: float = 10.0
+    ALIGNMENT_REWARD_SCALE: float = 0.5
+    GRASP_SUCCESS_REWARD: float = 100.0
+    COLLISION_PENALTY_VALUE: float = -100.0
+    GRASP_DISTANCE_THRESHOLD: float = 0.05
+    VELOCITY_MINIMUM_THRESHOLD: float = 1e-6
+
+    def __init__(self) -> None:
+        self._previous_distance_to_target: float = 0.0
+        self._previous_tool_center_point_position: np.ndarray = np.zeros(3)
+        self._is_first_step: bool = True
+
+    def calculate_reward(
+        self,
+        observation: ObservationModel
+    ) -> Tuple[float, bool, Dict[str, Any]]:
+        reward_components: RewardComponents = RewardComponents()
+        episode_terminated: bool = False
+        information_dictionary: Dict[str, Any] = {}
+
+        current_distance: float = observation.distance_to_target
+        current_position: np.ndarray = np.array(observation.tool_center_point_position)
+        target_direction: np.ndarray = np.array(observation.direction_to_target)
+
+        if not self._is_first_step:
+            reward_components.distance_reward = self._calculate_distance_reward(
+                current_distance)
+
+            reward_components.alignment_reward = self._calculate_alignment_reward(
+                current_position, target_direction)
+
+        reward_components.grasp_reward = self._calculate_grasp_reward(observation)
+
+        if reward_components.grasp_reward > 0.0:
+            information_dictionary["success"] = True
+
+        collision_result: Tuple[float, bool] = self._calculate_collision_penalty(observation)
+        reward_components.collision_penalty = collision_result[0]
+
+        if collision_result[1]:
+            episode_terminated = True
+            information_dictionary["collision"] = True
+
+        self._update_previous_state(current_distance, current_position)
+
+        information_dictionary["reward_components"] = {
+            "distance": reward_components.distance_reward,
+            "alignment": reward_components.alignment_reward,
+            "grasp": reward_components.grasp_reward,
+            "collision": reward_components.collision_penalty
+        }
+
+        return reward_components.total_reward, episode_terminated, information_dictionary
+
+    def reset_state(self, initial_observation: ObservationModel) -> None:
+        self._previous_distance_to_target = initial_observation.distance_to_target
+        self._previous_tool_center_point_position = np.array(
+            initial_observation.tool_center_point_position)
+        self._is_first_step = True
+
+    def _calculate_distance_reward(self, current_distance: float) -> float:
+        distance_improvement: float = self._previous_distance_to_target - current_distance
+        return distance_improvement * self.DISTANCE_REWARD_SCALE
+
+    def _calculate_alignment_reward(
+        self,
+        current_position: np.ndarray,
+        target_direction: np.ndarray
+    ) -> float:
+        velocity_vector: np.ndarray = current_position - self._previous_tool_center_point_position
+        velocity_magnitude: float = np.linalg.norm(velocity_vector)
+
+        if velocity_magnitude < self.VELOCITY_MINIMUM_THRESHOLD:
+            return 0.0
+
+        normalized_velocity: np.ndarray = velocity_vector / velocity_magnitude
+        alignment_dot_product: float = np.dot(normalized_velocity, target_direction)
+
+        return alignment_dot_product * self.ALIGNMENT_REWARD_SCALE
+
+    def _calculate_grasp_reward(self, observation: ObservationModel) -> float:
+        is_close_to_target: bool = observation.laser_sensor_distance < self.GRASP_DISTANCE_THRESHOLD
+        is_gripping: bool = observation.is_gripping_object
+
+        if is_close_to_target and is_gripping:
+            return self.GRASP_SUCCESS_REWARD
+
+        return 0.0
+
+    def _calculate_collision_penalty(
+        self,
+        observation: ObservationModel
+    ) -> Tuple[float, bool]:
+        if observation.collision_detected:
+            return self.COLLISION_PENALTY_VALUE, True
+
+        return 0.0, False
+
+    def _update_previous_state(
+        self,
+        current_distance: float,
+        current_position: np.ndarray
+    ) -> None:
+        self._previous_distance_to_target = current_distance
+        self._previous_tool_center_point_position = current_position.copy()
+        self._is_first_step = False
+```
+
+---
+
+## 15. Python Code - Environment
+
+### environments/unity_robot_environment.py
+```python
+import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
-import numpy as np
-import zmq
-import json
 from typing import Tuple, Dict, Any, Optional
+from models.command_model import CommandModel
+from models.observation_model import ObservationModel
+from enums.command_type import CommandType
+from services.network_service import NetworkService
+from services.reward_calculation_service import RewardCalculationService
 
-class UnityRobotEnv(gym.Env):
-    """
-    Custom Gymnasium environment for 4-DOF robot arm in Unity.
-    Communicates via ZeroMQ REQ-REP pattern.
-    """
 
-    metadata = {"render_modes": ["human"], "render_fps": 50}
+class UnityRobotEnvironment(gym.Env):
+    OBSERVATION_DIMENSION: int = 15
+    ACTION_DIMENSION: int = 5
+    MAXIMUM_DELTA_DEGREES: float = 10.0
+    GRIPPER_CLOSE_THRESHOLD: float = 0.5
+    DEFAULT_MAXIMUM_EPISODE_STEPS: int = 500
+
+    JOINT_ANGLE_LIMITS: np.ndarray = np.array([180.0, 90.0, 135.0, 180.0])
+    WORKSPACE_RADIUS_METERS: float = 0.6
+    LASER_MAXIMUM_RANGE_METERS: float = 1.0
+
+    metadata: Dict[str, Any] = {"render_modes": ["human"], "render_fps": 50}
 
     def __init__(
         self,
         server_address: str = "tcp://localhost:5555",
-        max_episode_steps: int = 500,
+        maximum_episode_steps: int = DEFAULT_MAXIMUM_EPISODE_STEPS,
         render_mode: Optional[str] = None
-    ):
+    ) -> None:
         super().__init__()
 
-        self.server_address = server_address
-        self.max_episode_steps = max_episode_steps
-        self.render_mode = render_mode
-        self.current_step = 0
+        self._server_address: str = server_address
+        self._maximum_episode_steps: int = maximum_episode_steps
+        self._render_mode: Optional[str] = render_mode
+        self._current_step_count: int = 0
 
-        # ═══════════════════════════════════════════════════════════
-        # OBSERVATION SPACE (Normalized -1 to 1 or 0 to 1)
-        # ═══════════════════════════════════════════════════════════
-        # Total: 4 + 1 + 3 + 3 + 1 + 1 + 2 = 15 dimensions
-        self.observation_space = spaces.Box(
+        self._network_service: NetworkService = NetworkService(server_address)
+        self._reward_calculation_service: RewardCalculationService = RewardCalculationService()
+
+        self.observation_space: spaces.Box = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(15,),
+            shape=(self.OBSERVATION_DIMENSION,),
             dtype=np.float32
         )
 
-        # ═══════════════════════════════════════════════════════════
-        # ACTION SPACE (Continuous)
-        # ═══════════════════════════════════════════════════════════
-        # 4 joint deltas + 1 gripper action
-        self.action_space = spaces.Box(
+        self.action_space: spaces.Box = spaces.Box(
             low=-1.0,
             high=1.0,
-            shape=(5,),
+            shape=(self.ACTION_DIMENSION,),
             dtype=np.float32
         )
 
-        # Joint limits for normalization
-        self.joint_limits = np.array([180, 90, 135, 180])  # degrees
-        self.max_delta = 10.0  # max degrees per step
+        self._network_service.connect()
 
-        # State tracking
-        self.prev_distance = None
-        self.prev_tcp_velocity = np.zeros(3)
-        self.prev_tcp_position = np.zeros(3)
+    def step(
+        self,
+        action: np.ndarray
+    ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+        self._current_step_count += 1
 
-        # ZMQ Setup
-        self._setup_zmq()
+        scaled_joint_deltas: np.ndarray = action[:4] * self.MAXIMUM_DELTA_DEGREES
+        gripper_action_value: float = float(action[4])
 
-    def _setup_zmq(self):
-        """Initialize ZeroMQ connection."""
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.REQ)
-        self.socket.connect(self.server_address)
-        self.socket.setsockopt(zmq.RCVTIMEO, 5000)  # 5s timeout
+        step_command: CommandModel = CommandModel(
+            command_type=CommandType.STEP,
+            actions=scaled_joint_deltas.tolist(),
+            gripper_close_value=gripper_action_value
+        )
 
-    def _send_command(self, cmd: Dict) -> Dict:
-        """Send command to Unity and receive response."""
-        self.socket.send_string(json.dumps(cmd))
-        response = self.socket.recv_string()
-        return json.loads(response)
+        observation_model: ObservationModel = self._network_service.send_command(step_command)
+        normalized_observation: np.ndarray = self._normalize_observation(observation_model)
 
-    # ═══════════════════════════════════════════════════════════════
-    # OBSERVATION PROCESSING
-    # ═══════════════════════════════════════════════════════════════
+        reward: float
+        terminated: bool
+        information: Dict[str, Any]
+        reward, terminated, information = self._reward_calculation_service.calculate_reward(
+            observation_model)
 
-    def _process_observation(self, obs: Dict) -> np.ndarray:
-        """Convert Unity observation to normalized numpy array."""
+        truncated: bool = self._current_step_count >= self._maximum_episode_steps
 
-        # 1. Normalized joint angles (4 values)
-        joints_norm = np.array(obs['jointAngles']) / self.joint_limits
-
-        # 2. Gripper state (1 value: 0=open, 1=closed)
-        gripper = np.array([obs['gripperState']])
-
-        # 3. TCP position relative to base (3 values, normalized)
-        tcp = np.array(obs['tcpPosition']) / 0.6  # workspace ~0.6m
-
-        # 4. Direction to target (3 values, already normalized)
-        direction = np.array(obs['directionToTarget'])
-
-        # 5. Laser distance (1 value, normalized)
-        laser = np.array([obs['laserDistance'] / 1.0])  # max 1m
-
-        # 6. Is gripping flag (1 value)
-        gripping = np.array([1.0 if obs['isGripping'] else 0.0])
-
-        # 7. Target orientation one-hot (2 values)
-        orientation = np.array(obs['targetOrientation'])
-
-        # Concatenate all
-        observation = np.concatenate([
-            joints_norm,    # 4
-            gripper,        # 1
-            tcp,            # 3
-            direction,      # 3
-            laser,          # 1
-            gripping,       # 1
-            orientation     # 2
-        ]).astype(np.float32)
-
-        return np.clip(observation, -1.0, 1.0)
-
-    # ═══════════════════════════════════════════════════════════════
-    # REWARD FUNCTION
-    # ═══════════════════════════════════════════════════════════════
-
-    def _calculate_reward(self, obs: Dict) -> Tuple[float, bool, Dict]:
-        """
-        Calculate reward based on:
-        - Distance improvement (R_dist)
-        - Velocity alignment (R_align)
-        - Grasp success (R_grasp)
-        - Collision penalty (R_penalty)
-
-        R_total = R_dist + R_align + R_grasp + R_penalty
-        """
-        reward = 0.0
-        done = False
-        info = {}
-
-        current_distance = obs['distanceToTarget']
-        current_tcp = np.array(obs['tcpPosition'])
-        direction = np.array(obs['directionToTarget'])
-
-        # ─────────────────────────────────────────────────────────
-        # R_dist: Distance improvement reward
-        # ─────────────────────────────────────────────────────────
-        if self.prev_distance is not None:
-            distance_delta = self.prev_distance - current_distance
-            r_dist = distance_delta * 10.0  # Scale factor
-            reward += r_dist
-            info['r_dist'] = r_dist
-
-        # ─────────────────────────────────────────────────────────
-        # R_align: Velocity alignment with target direction
-        # ─────────────────────────────────────────────────────────
-        tcp_velocity = current_tcp - self.prev_tcp_position
-        if np.linalg.norm(tcp_velocity) > 1e-6:
-            velocity_norm = tcp_velocity / np.linalg.norm(tcp_velocity)
-            alignment = np.dot(velocity_norm, direction)
-            r_align = alignment * 0.5  # Reward aligned movement
-            reward += r_align
-            info['r_align'] = r_align
-
-        # ─────────────────────────────────────────────────────────
-        # R_grasp: Grasp success reward
-        # ─────────────────────────────────────────────────────────
-        if obs['laserDistance'] < 0.05 and obs['isGripping']:
-            r_grasp = 100.0  # Big reward for successful grasp
-            reward += r_grasp
-            info['r_grasp'] = r_grasp
-            info['success'] = True
-            # Could set done=True here for pickup-only task
-
-        # ─────────────────────────────────────────────────────────
-        # R_penalty: Collision penalty
-        # ─────────────────────────────────────────────────────────
-        if obs['collision']:
-            r_penalty = -100.0
-            reward += r_penalty
-            done = True
-            info['r_penalty'] = r_penalty
-            info['collision'] = True
-
-        # Update state for next step
-        self.prev_distance = current_distance
-        self.prev_tcp_position = current_tcp.copy()
-
-        return reward, done, info
-
-    # ═══════════════════════════════════════════════════════════════
-    # GYM INTERFACE
-    # ═══════════════════════════════════════════════════════════════
-
-    def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, Dict]:
-        """Execute one environment step."""
-        self.current_step += 1
-
-        # Scale actions
-        delta_angles = action[:4] * self.max_delta  # degrees
-        gripper_action = action[4]
-
-        # Send to Unity
-        cmd = {
-            "type": "STEP",
-            "actions": delta_angles.tolist(),
-            "gripperClose": float(gripper_action)
-        }
-        obs = self._send_command(cmd)
-
-        # Check for errors
-        if 'error' in obs:
-            raise RuntimeError(f"Unity error: {obs['error']}")
-
-        # Process
-        observation = self._process_observation(obs)
-        reward, terminated, info = self._calculate_reward(obs)
-
-        # Check truncation (max steps)
-        truncated = self.current_step >= self.max_episode_steps
-
-        return observation, reward, terminated, truncated, info
+        return normalized_observation, reward, terminated, truncated, information
 
     def reset(
         self,
         seed: Optional[int] = None,
-        options: Optional[Dict] = None
-    ) -> Tuple[np.ndarray, Dict]:
-        """Reset the environment."""
+        options: Optional[Dict[str, Any]] = None
+    ) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
 
-        self.current_step = 0
-        self.prev_distance = None
-        self.prev_tcp_position = np.zeros(3)
+        self._current_step_count = 0
 
-        # Send reset to Unity
-        cmd = {"type": "RESET"}
-        obs = self._send_command(cmd)
+        reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
+        observation_model: ObservationModel = self._network_service.send_command(reset_command)
 
-        observation = self._process_observation(obs)
-        self.prev_distance = obs['distanceToTarget']
-        self.prev_tcp_position = np.array(obs['tcpPosition'])
+        self._reward_calculation_service.reset_state(observation_model)
 
-        return observation, {}
+        normalized_observation: np.ndarray = self._normalize_observation(observation_model)
 
-    def close(self):
-        """Clean up resources."""
-        self.socket.close()
-        self.context.term()
+        return normalized_observation, {}
 
-    def set_simulation_mode(self, smooth: bool):
-        """Switch between training and simulation modes."""
-        cmd = {
-            "type": "CONFIG",
-            "simulationMode": smooth
-        }
-        self._send_command(cmd)
-```
+    def close(self) -> None:
+        self._network_service.disconnect()
 
-### 3.3 Training Script
+    def set_simulation_mode(self, enable_smooth_movement: bool) -> None:
+        configuration_command: CommandModel = CommandModel(
+            command_type=CommandType.CONFIGURATION,
+            simulation_mode_enabled=enable_smooth_movement
+        )
+        self._network_service.send_command(configuration_command)
 
-```python
-from stable_baselines3 import PPO
-from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
-from unity_robot_env import UnityRobotEnv
-import os
-
-def make_env():
-    return UnityRobotEnv(
-        server_address="tcp://localhost:5555",
-        max_episode_steps=500
-    )
-
-def train():
-    # Create vectorized environment with normalization
-    env = DummyVecEnv([make_env])
-    env = VecNormalize(env, norm_obs=True, norm_reward=True)
-
-    # Callbacks
-    checkpoint_callback = CheckpointCallback(
-        save_freq=10000,
-        save_path="./checkpoints/",
-        name_prefix="robot_ppo"
-    )
-
-    # PPO Configuration
-    model = PPO(
-        "MlpPolicy",
-        env,
-        learning_rate=3e-4,
-        n_steps=2048,
-        batch_size=64,
-        n_epochs=10,
-        gamma=0.99,
-        gae_lambda=0.95,
-        clip_range=0.2,
-        ent_coef=0.01,
-        verbose=1,
-        tensorboard_log="./tensorboard/"
-    )
-
-    # Curriculum Learning Phases
-    CURRICULUM = [
-        {"name": "touch", "steps": 100_000, "reward_threshold": 50},
-        {"name": "grasp", "steps": 200_000, "reward_threshold": 100},
-        {"name": "pick_place", "steps": 500_000, "reward_threshold": 200},
-    ]
-
-    for phase in CURRICULUM:
-        print(f"\n{'='*50}")
-        print(f"CURRICULUM PHASE: {phase['name']}")
-        print(f"{'='*50}\n")
-
-        model.learn(
-            total_timesteps=phase['steps'],
-            callback=checkpoint_callback,
-            reset_num_timesteps=False
+    def _normalize_observation(self, observation: ObservationModel) -> np.ndarray:
+        normalized_joint_angles: np.ndarray = (
+            np.array(observation.joint_angles) / self.JOINT_ANGLE_LIMITS
         )
 
-        # Save phase checkpoint
-        model.save(f"models/robot_{phase['name']}")
-        env.save(f"models/vecnormalize_{phase['name']}.pkl")
+        gripper_state_array: np.ndarray = np.array([observation.gripper_state])
 
-    print("\nTraining complete!")
-    env.close()
+        normalized_tool_position: np.ndarray = (
+            np.array(observation.tool_center_point_position) / self.WORKSPACE_RADIUS_METERS
+        )
 
-if __name__ == "__main__":
-    train()
+        direction_to_target: np.ndarray = np.array(observation.direction_to_target)
+
+        normalized_laser_distance: np.ndarray = np.array([
+            observation.laser_sensor_distance / self.LASER_MAXIMUM_RANGE_METERS
+        ])
+
+        is_gripping_array: np.ndarray = np.array([
+            1.0 if observation.is_gripping_object else 0.0
+        ])
+
+        target_orientation: np.ndarray = np.array(observation.target_orientation_one_hot)
+
+        concatenated_observation: np.ndarray = np.concatenate([
+            normalized_joint_angles,
+            gripper_state_array,
+            normalized_tool_position,
+            direction_to_target,
+            normalized_laser_distance,
+            is_gripping_array,
+            target_orientation
+        ])
+
+        clipped_observation: np.ndarray = np.clip(
+            concatenated_observation, -1.0, 1.0
+        ).astype(np.float32)
+
+        return clipped_observation
 ```
 
-### 3.4 Control Panel UI
+---
 
+## 16. Python Code - Training
+
+### train.py
 ```python
-import customtkinter as ctk
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
-from unity_robot_env import UnityRobotEnv
+from stable_baselines3.common.callbacks import CheckpointCallback
+from environments.unity_robot_environment import UnityRobotEnvironment
+from dataclasses import dataclass
+from typing import List
+
+
+@dataclass
+class CurriculumPhase:
+    name: str
+    training_steps: int
+    reward_threshold: float
+
+
+class TrainingController:
+    LEARNING_RATE: float = 3e-4
+    STEPS_PER_UPDATE: int = 2048
+    BATCH_SIZE: int = 64
+    TRAINING_EPOCHS: int = 10
+    DISCOUNT_FACTOR: float = 0.99
+    GAE_LAMBDA: float = 0.95
+    CLIP_RANGE: float = 0.2
+    ENTROPY_COEFFICIENT: float = 0.01
+    CHECKPOINT_FREQUENCY: int = 10000
+
+    def __init__(self, server_address: str = "tcp://localhost:5555") -> None:
+        self._server_address: str = server_address
+        self._environment: VecNormalize = None
+        self._model: PPO = None
+        self._curriculum_phases: List[CurriculumPhase] = self._create_curriculum_phases()
+
+    def initialize_training(self) -> None:
+        vectorized_environment: DummyVecEnv = DummyVecEnv([self._create_environment])
+        self._environment = VecNormalize(
+            vectorized_environment,
+            norm_obs=True,
+            norm_reward=True
+        )
+
+        self._model = PPO(
+            policy="MlpPolicy",
+            env=self._environment,
+            learning_rate=self.LEARNING_RATE,
+            n_steps=self.STEPS_PER_UPDATE,
+            batch_size=self.BATCH_SIZE,
+            n_epochs=self.TRAINING_EPOCHS,
+            gamma=self.DISCOUNT_FACTOR,
+            gae_lambda=self.GAE_LAMBDA,
+            clip_range=self.CLIP_RANGE,
+            ent_coef=self.ENTROPY_COEFFICIENT,
+            verbose=1,
+            tensorboard_log="./tensorboard_logs/"
+        )
+
+    def execute_curriculum_training(self) -> None:
+        checkpoint_callback: CheckpointCallback = CheckpointCallback(
+            save_freq=self.CHECKPOINT_FREQUENCY,
+            save_path="./checkpoints/",
+            name_prefix="robot_policy"
+        )
+
+        for phase in self._curriculum_phases:
+            print(f"\n{'=' * 60}")
+            print(f"CURRICULUM PHASE: {phase.name}")
+            print(f"Training Steps: {phase.training_steps}")
+            print(f"{'=' * 60}\n")
+
+            self._model.learn(
+                total_timesteps=phase.training_steps,
+                callback=checkpoint_callback,
+                reset_num_timesteps=False
+            )
+
+            model_save_path: str = f"./models/robot_policy_{phase.name}"
+            normalizer_save_path: str = f"./models/normalizer_{phase.name}.pkl"
+
+            self._model.save(model_save_path)
+            self._environment.save(normalizer_save_path)
+
+            print(f"Phase '{phase.name}' completed. Model saved.")
+
+    def shutdown(self) -> None:
+        if self._environment is not None:
+            self._environment.close()
+
+    def _create_environment(self) -> UnityRobotEnvironment:
+        return UnityRobotEnvironment(
+            server_address=self._server_address,
+            maximum_episode_steps=500
+        )
+
+    def _create_curriculum_phases(self) -> List[CurriculumPhase]:
+        return [
+            CurriculumPhase(name="touch", training_steps=100_000, reward_threshold=50.0),
+            CurriculumPhase(name="grasp", training_steps=200_000, reward_threshold=100.0),
+            CurriculumPhase(name="pick_and_place", training_steps=500_000, reward_threshold=200.0)
+        ]
+
+
+def main() -> None:
+    training_controller: TrainingController = TrainingController()
+
+    try:
+        training_controller.initialize_training()
+        training_controller.execute_curriculum_training()
+    finally:
+        training_controller.shutdown()
+        print("\nTraining completed successfully.")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+---
+
+## 17. Python Code - Control Panel
+
+### ui/control_panel.py
+```python
 import threading
-import numpy as np
+import customtkinter as ctk
+from typing import Optional
+from stable_baselines3 import PPO
+from environments.unity_robot_environment import UnityRobotEnvironment
+
 
 class RobotControlPanel(ctk.CTk):
-    def __init__(self):
+    WINDOW_TITLE: str = "Robot Control Panel"
+    WINDOW_GEOMETRY: str = "600x500"
+    BUTTON_PADDING: int = 5
+    FRAME_PADDING: int = 10
+
+    def __init__(self) -> None:
         super().__init__()
 
-        self.title("Robot Control Panel")
-        self.geometry("600x500")
+        self._environment: Optional[UnityRobotEnvironment] = None
+        self._trained_model: Optional[PPO] = None
+        self._inference_thread: Optional[threading.Thread] = None
+        self._is_inference_running: bool = False
 
-        self.env = None
-        self.model = None
-        self.running = False
+        self._configure_window()
+        self._create_mode_selection_frame()
+        self._create_target_position_frame()
+        self._create_control_buttons_frame()
+        self._create_status_display()
 
-        self._create_widgets()
+    def _configure_window(self) -> None:
+        self.title(self.WINDOW_TITLE)
+        self.geometry(self.WINDOW_GEOMETRY)
 
-    def _create_widgets(self):
-        # Mode Selection
-        self.mode_frame = ctk.CTkFrame(self)
-        self.mode_frame.pack(pady=10, padx=10, fill="x")
+    def _create_mode_selection_frame(self) -> None:
+        mode_frame: ctk.CTkFrame = ctk.CTkFrame(self)
+        mode_frame.pack(pady=self.FRAME_PADDING, padx=self.FRAME_PADDING, fill="x")
 
-        self.sim_mode_var = ctk.BooleanVar(value=False)
-        self.sim_mode_check = ctk.CTkCheckBox(
-            self.mode_frame,
-            text="Simulation Mode (Smooth)",
-            variable=self.sim_mode_var,
-            command=self._on_mode_change
+        self._simulation_mode_variable: ctk.BooleanVar = ctk.BooleanVar(value=False)
+
+        simulation_mode_checkbox: ctk.CTkCheckBox = ctk.CTkCheckBox(
+            mode_frame,
+            text="Simulation Mode (Smooth Movement)",
+            variable=self._simulation_mode_variable,
+            command=self._handle_mode_change
         )
-        self.sim_mode_check.pack(pady=5)
+        simulation_mode_checkbox.pack(pady=self.BUTTON_PADDING)
 
-        # Manual Target Input
-        self.target_frame = ctk.CTkFrame(self)
-        self.target_frame.pack(pady=10, padx=10, fill="x")
+    def _create_target_position_frame(self) -> None:
+        target_frame: ctk.CTkFrame = ctk.CTkFrame(self)
+        target_frame.pack(pady=self.FRAME_PADDING, padx=self.FRAME_PADDING, fill="x")
 
-        ctk.CTkLabel(self.target_frame, text="Target Position:").pack()
+        title_label: ctk.CTkLabel = ctk.CTkLabel(target_frame, text="Target Position:")
+        title_label.pack()
 
-        self.target_entries = {}
-        for axis in ['X', 'Y', 'Z']:
-            frame = ctk.CTkFrame(self.target_frame)
-            frame.pack(fill="x", pady=2)
-            ctk.CTkLabel(frame, text=f"{axis}:").pack(side="left")
-            entry = ctk.CTkEntry(frame, width=100)
-            entry.insert(0, "0.3")
-            entry.pack(side="left", padx=5)
-            self.target_entries[axis] = entry
+        self._target_position_entries: dict = {}
+        axis_labels: list = ["X", "Y", "Z"]
 
-        # Control Buttons
-        self.btn_frame = ctk.CTkFrame(self)
-        self.btn_frame.pack(pady=10, padx=10, fill="x")
+        for axis_label in axis_labels:
+            entry_frame: ctk.CTkFrame = ctk.CTkFrame(target_frame)
+            entry_frame.pack(fill="x", pady=2)
 
-        self.connect_btn = ctk.CTkButton(
-            self.btn_frame,
-            text="Connect",
-            command=self._connect
+            axis_name_label: ctk.CTkLabel = ctk.CTkLabel(entry_frame, text=f"{axis_label}:")
+            axis_name_label.pack(side="left")
+
+            position_entry: ctk.CTkEntry = ctk.CTkEntry(entry_frame, width=100)
+            position_entry.insert(0, "0.3")
+            position_entry.pack(side="left", padx=self.BUTTON_PADDING)
+
+            self._target_position_entries[axis_label] = position_entry
+
+    def _create_control_buttons_frame(self) -> None:
+        buttons_frame: ctk.CTkFrame = ctk.CTkFrame(self)
+        buttons_frame.pack(pady=self.FRAME_PADDING, padx=self.FRAME_PADDING, fill="x")
+
+        connect_button: ctk.CTkButton = ctk.CTkButton(
+            buttons_frame,
+            text="Connect to Unity",
+            command=self._handle_connect
         )
-        self.connect_btn.pack(pady=5)
+        connect_button.pack(pady=self.BUTTON_PADDING)
 
-        self.load_btn = ctk.CTkButton(
-            self.btn_frame,
-            text="Load Model",
-            command=self._load_model
+        load_model_button: ctk.CTkButton = ctk.CTkButton(
+            buttons_frame,
+            text="Load Trained Model",
+            command=self._handle_load_model
         )
-        self.load_btn.pack(pady=5)
+        load_model_button.pack(pady=self.BUTTON_PADDING)
 
-        self.run_btn = ctk.CTkButton(
-            self.btn_frame,
+        execute_button: ctk.CTkButton = ctk.CTkButton(
+            buttons_frame,
             text="Execute Trajectory",
-            command=self._run_inference
+            command=self._handle_execute_trajectory
         )
-        self.run_btn.pack(pady=5)
+        execute_button.pack(pady=self.BUTTON_PADDING)
 
-        self.stop_btn = ctk.CTkButton(
-            self.btn_frame,
-            text="Stop",
-            command=self._stop
+        stop_button: ctk.CTkButton = ctk.CTkButton(
+            buttons_frame,
+            text="Stop Execution",
+            command=self._handle_stop_execution
         )
-        self.stop_btn.pack(pady=5)
+        stop_button.pack(pady=self.BUTTON_PADDING)
 
-        # Status
-        self.status_label = ctk.CTkLabel(self, text="Status: Disconnected")
-        self.status_label.pack(pady=10)
+    def _create_status_display(self) -> None:
+        self._status_label: ctk.CTkLabel = ctk.CTkLabel(
+            self,
+            text="Status: Disconnected"
+        )
+        self._status_label.pack(pady=self.FRAME_PADDING)
 
-    def _connect(self):
+    def _handle_connect(self) -> None:
         try:
-            self.env = UnityRobotEnv()
-            self.status_label.configure(text="Status: Connected")
-        except Exception as e:
-            self.status_label.configure(text=f"Error: {e}")
+            self._environment = UnityRobotEnvironment()
+            self._update_status("Status: Connected to Unity")
+        except Exception as connection_error:
+            self._update_status(f"Connection Error: {connection_error}")
 
-    def _on_mode_change(self):
-        if self.env:
-            self.env.set_simulation_mode(self.sim_mode_var.get())
-
-    def _load_model(self):
-        try:
-            self.model = PPO.load("models/robot_pick_place")
-            self.status_label.configure(text="Status: Model loaded")
-        except Exception as e:
-            self.status_label.configure(text=f"Error: {e}")
-
-    def _run_inference(self):
-        if not self.env or not self.model:
-            self.status_label.configure(text="Connect and load model first")
+    def _handle_mode_change(self) -> None:
+        if self._environment is None:
             return
 
-        self.running = True
-        self.status_label.configure(text="Running inference...")
+        enable_simulation_mode: bool = self._simulation_mode_variable.get()
+        self._environment.set_simulation_mode(enable_simulation_mode)
 
-        def run():
-            obs, _ = self.env.reset()
-            while self.running:
-                action, _ = self.model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = self.env.step(action)
+        mode_name: str = "Simulation" if enable_simulation_mode else "Training"
+        self._update_status(f"Status: Mode changed to {mode_name}")
 
-                if done or truncated:
-                    if info.get('success'):
-                        self.status_label.configure(text="Success!")
-                    break
+    def _handle_load_model(self) -> None:
+        try:
+            model_path: str = "./models/robot_policy_pick_and_place"
+            self._trained_model = PPO.load(model_path)
+            self._update_status("Status: Trained model loaded successfully")
+        except Exception as load_error:
+            self._update_status(f"Model Load Error: {load_error}")
 
-            self.running = False
+    def _handle_execute_trajectory(self) -> None:
+        if self._environment is None:
+            self._update_status("Error: Not connected to Unity")
+            return
 
-        threading.Thread(target=run, daemon=True).start()
+        if self._trained_model is None:
+            self._update_status("Error: No trained model loaded")
+            return
 
-    def _stop(self):
-        self.running = False
-        self.status_label.configure(text="Stopped")
+        self._is_inference_running = True
+        self._update_status("Status: Executing trajectory...")
+
+        self._inference_thread = threading.Thread(
+            target=self._execute_inference_loop,
+            daemon=True
+        )
+        self._inference_thread.start()
+
+    def _handle_stop_execution(self) -> None:
+        self._is_inference_running = False
+        self._update_status("Status: Execution stopped")
+
+    def _execute_inference_loop(self) -> None:
+        observation, _ = self._environment.reset()
+
+        while self._is_inference_running:
+            action, _ = self._trained_model.predict(observation, deterministic=True)
+            observation, reward, terminated, truncated, info = self._environment.step(action)
+
+            if terminated or truncated:
+                if info.get("success", False):
+                    self._update_status("Status: Task completed successfully!")
+                else:
+                    self._update_status("Status: Episode ended")
+                break
+
+        self._is_inference_running = False
+
+    def _update_status(self, status_message: str) -> None:
+        self._status_label.configure(text=status_message)
+
+
+def main() -> None:
+    control_panel: RobotControlPanel = RobotControlPanel()
+    control_panel.mainloop()
+
 
 if __name__ == "__main__":
-    app = RobotControlPanel()
-    app.mainloop()
+    main()
 ```
 
 ---
 
-## 4. Implementation Phases
+## 18. Requirements
 
+### requirements.txt
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PHASE 1: THE SKELETON (Unity)                                              │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  □ Set up scene with ArticulationBodies (4-DOF chain)                       │
-│  □ Implement Raycast laser sensor                                           │
-│  □ Implement random box spawning in reachable hemisphere                    │
-│  □ Manual test: Control joints from Inspector                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PHASE 2: THE CONNECTION (ZMQ Bridge)                                       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  □ Install NetMQ in Unity (via NuGet)                                       │
-│  □ Install pyzmq in Python (pip install pyzmq)                              │
-│  □ Create ZMQServer.cs: Listen JSON, parse, apply to motors, return state   │
-│  □ Create test_client.py: Send random commands, verify Unity responds       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PHASE 3: THE GYM ENVIRONMENT (Python)                                      │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  □ Create UnityRobotEnv(gym.Env) class                                      │
-│  □ Implement step(): Send action → Wait ZMQ → Calculate reward → Return     │
-│  □ Implement reset(): Send RESET → Unity repositions robot and object       │
-│  □ Implement observation normalization                                       │
-│  □ Implement reward function with R_dist, R_align, R_grasp, R_penalty       │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PHASE 4: TRAINING (RL Loop)                                                │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  □ Configure PPO with MlpPolicy                                             │
-│  □ Implement Curriculum Learning:                                           │
-│    ├── Lesson 1: Touch object only (no grasping)                           │
-│    ├── Lesson 2: Grasp object                                              │
-│    └── Lesson 3: Complete Pick & Place                                     │
-│  □ Train and save checkpoints                                               │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    │
-                                    ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  PHASE 5: CONTROL PANEL & INFERENCE                                         │
-├─────────────────────────────────────────────────────────────────────────────┤
-│  □ Build CustomTkinter UI                                                   │
-│  □ Implement "Simulation Mode" toggle (sends flag to Unity)                 │
-│  □ Add sliders/inputs for manual origin/destination coordinates             │
-│  □ "Execute Trajectory" button: Load .zip model, run inference loop         │
-└─────────────────────────────────────────────────────────────────────────────┘
+gymnasium>=0.29.0
+stable-baselines3>=2.0.0
+pyzmq>=25.0.0
+numpy>=1.24.0
+customtkinter>=5.0.0
+tensorboard>=2.14.0
 ```
 
 ---
 
-## 5. Critical Notes for Code Generation Agent
+## 19. Critical Implementation Notes
 
-### 5.1 Normalization
-
-> **CRITICAL:** All neural network inputs must be normalized to [-1, 1] or [0, 1].
-
-```python
-# Unity returns angles in degrees (e.g., -90 to 90)
-# Python must normalize:
-joint_normalized = joint_degrees / joint_max_degrees
-```
-
-### 5.2 Timing & Determinism
-
-```csharp
-// Unity: Set fixed timestep
-Time.fixedDeltaTime = 0.02f;  // 50Hz physics
-```
-
-```python
-# Python: BLOCKING wait for Unity response
-# This guarantees determinism in RL training
-response = socket.recv_string()  # Blocks until Unity responds
-```
-
-### 5.3 Target Orientation Encoding
-
-```python
-# One-hot encoding in observation:
-# Vertical target:   [1, 0]
-# Horizontal target: [0, 1]
-# This changes wrist approach strategy
-```
-
-### 5.4 Collision Handling
-
-```csharp
-// Unity: Detect non-target collisions
-void OnCollisionEnter(Collision collision)
-{
-    if (!collision.gameObject.CompareTag("Target"))
-    {
-        collisionDetected = true;
-    }
-}
-```
-
-```python
-# Python: Massive penalty + episode termination
-if obs['collision']:
-    reward = -100
-    done = True
-```
-
----
-
-## 6. File Structure
-
-```
-project/
-├── Unity/
-│   ├── Assets/
-│   │   ├── Scripts/
-│   │   │   ├── RobotController.cs
-│   │   │   ├── ZMQServer.cs
-│   │   │   ├── LaserSensor.cs
-│   │   │   └── TargetSpawner.cs
-│   │   └── Prefabs/
-│   │       ├── Robot4DOF.prefab
-│   │       └── TargetBox.prefab
-│   └── Packages/
-│       └── NetMQ/
-│
-└── Python/
-    ├── unity_robot_env.py
-    ├── train.py
-    ├── control_panel.py
-    ├── test_client.py
-    ├── models/
-    │   ├── robot_touch.zip
-    │   ├── robot_grasp.zip
-    │   └── robot_pick_place.zip
-    └── requirements.txt
-```
-
----
-
-**This specification is sufficient to generate the complete code for both layers. Proceed to implementation.**
+| Aspect | Requirement |
+|--------|-------------|
+| Collision Penalty | Handled via `CollisionEvents` → `GameManager` → `ObservationModel.CollisionDetected` → `RewardCalculationService._calculate_collision_penalty()` |
+| Type Safety | All variables explicitly typed, no `var` usage |
+| Naming | `_privateField`, `PublicProperty`, full descriptive names |
+| Encapsulation | Private fields with public properties throughout |
+| Bootstrap | `GameManager.Awake()` initializes all services, no `Start()` usage |
+| SOLID | Single responsibility per class, interfaces for dependencies |
+| MVCS | Clear separation: Models, Controllers, Services |
+| Braces | Always present, even single-line blocks |
