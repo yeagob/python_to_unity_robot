@@ -1,339 +1,316 @@
-# Communication Specification: Python-Unity Protocol
+# Communication Specification: ZeroMQ Python-Unity Protocol
 
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Last Updated:** 2025-11-22
 **Status:** Active
 
 ## Overview
 
-This specification defines the communication protocol between Python-based LLM agents and the Unity robot simulation. The protocol enables bidirectional communication for robot control, state queries, and event notifications.
+This specification defines the ZeroMQ-based communication protocol between Python RL agents and the Unity robot simulation. The protocol uses the REQ-REP (Request-Reply) pattern with JSON payloads, ensuring Python controls the simulation step for deterministic reinforcement learning training.
 
 ---
 
 ## Requirements
 
-### Requirement: COMM-001 - Connection Establishment
-The system SHALL support reliable connection establishment between Python clients and the Unity server.
+### Requirement: COMM-001 - ZeroMQ Connection
+The system SHALL use ZeroMQ REQ-REP pattern for communication between Python and Unity.
 
-#### Scenario: TCP Connection
-- WHEN a Python client initiates a connection to the Unity server
-- THEN the server SHALL accept the connection on the configured port
-- AND respond with a connection acknowledgment message
-- AND the connection SHALL remain open for subsequent commands
+#### Scenario: Connection Establishment
+- WHEN Python client creates a ZMQ REQ socket
+- AND connects to `tcp://localhost:5555`
+- THEN the Unity server SHALL accept the connection via ResponseSocket
+- AND be ready to process requests
+
+#### Scenario: Request-Reply Cycle
+- WHEN Python sends a request message
+- THEN Python SHALL block until Unity responds
+- AND Unity SHALL process exactly one request before responding
+- AND this SHALL ensure deterministic simulation stepping
 
 #### Scenario: Connection Timeout
-- WHEN a connection attempt exceeds the timeout period (30 seconds)
-- THEN the client SHALL receive a timeout error
-- AND retry logic MAY be implemented by the client
-
-#### Scenario: Multiple Clients
-- WHEN multiple Python clients attempt to connect
-- THEN the server SHALL handle connections based on configuration
-- AND either accept multiple clients or reject additional connections with appropriate error
+- WHEN no response is received within 5 seconds
+- THEN Python SHALL raise a timeout exception
+- AND the client MAY attempt reconnection
 
 ---
 
 ### Requirement: COMM-002 - Message Format
-The system SHALL use a standardized message format for all communications.
+The system SHALL use JSON for all message serialization.
 
-#### Scenario: Request Message
-- WHEN a client sends a request
-- THEN the message SHALL be formatted as JSON
-- AND include: message_id, command, parameters, timestamp
+#### Scenario: Command Message (Python → Unity)
+- WHEN Python sends a command
+- THEN the message SHALL be a JSON object containing:
+  - `type`: Command type string ("STEP", "RESET", "CONFIG")
+  - `actions`: Array of 4 float values (joint deltas) for STEP
+  - `gripperClose`: Float 0-1 for gripper action
+  - `simulationMode`: Boolean for CONFIG commands
 
-#### Scenario: Response Message
-- WHEN the server responds to a request
-- THEN the message SHALL be formatted as JSON
-- AND include: message_id (matching request), status, data, error, timestamp
+#### Scenario: Observation Message (Unity → Python)
+- WHEN Unity responds to a command
+- THEN the message SHALL be a JSON object containing:
+  - `jointAngles`: Array of 4 float values (degrees)
+  - `tcpPosition`: Array of 3 float values (x, y, z meters)
+  - `directionToTarget`: Array of 3 float values (normalized)
+  - `distanceToTarget`: Float (meters)
+  - `gripperState`: Float 0-1 (open percentage)
+  - `isGripping`: Boolean
+  - `laserHit`: Boolean
+  - `laserDistance`: Float (meters)
+  - `collision`: Boolean
+  - `targetOrientation`: Array of 2 floats (one-hot)
+  - `reset`: Boolean (true after RESET command)
 
-#### Scenario: Event Message
-- WHEN the server emits an event
-- THEN the message SHALL be formatted as JSON
-- AND include: event_type, data, timestamp
-
----
-
-### Requirement: COMM-003 - Message Framing
-The system SHALL implement message framing to handle TCP stream segmentation.
-
-#### Scenario: Length-Prefixed Messages
-- WHEN sending a message
-- THEN the message SHALL be prefixed with a 4-byte big-endian length field
-- AND the receiver SHALL read the length first, then the message body
-
-#### Scenario: Large Messages
-- WHEN a message exceeds the buffer size
-- THEN the receiver SHALL accumulate data until the complete message is received
-- AND process the message only when complete
+#### Scenario: Error Response
+- WHEN an error occurs during processing
+- THEN Unity SHALL respond with:
+  - `error`: String describing the error
 
 ---
 
-### Requirement: COMM-004 - Request-Response Pattern
-The system SHALL implement synchronous request-response communication.
+### Requirement: COMM-003 - Command Types
+The system SHALL support three command types for RL training.
 
-#### Scenario: Command Execution
-- WHEN a client sends a command request
-- THEN the server SHALL process the command
-- AND return a response before the client timeout expires
-- AND the response SHALL reference the original request ID
+#### Scenario: STEP Command
+- WHEN Python sends `{"type": "STEP", "actions": [...], "gripperClose": 0.5}`
+- THEN Unity SHALL:
+  1. Apply delta angles to current joint positions
+  2. Set gripper state (>0.5 = closed)
+  3. Execute one physics step
+  4. Build and return observation
 
-#### Scenario: Long-Running Commands
-- WHEN a command takes extended time (e.g., robot movement)
-- THEN the server SHALL return an immediate acknowledgment
-- AND send a completion event when the operation finishes
-- AND support status queries during execution
+#### Scenario: RESET Command
+- WHEN Python sends `{"type": "RESET"}`
+- THEN Unity SHALL:
+  1. Reset robot to home position (all joints = 0)
+  2. Open gripper
+  3. Spawn new target at random position
+  4. Clear collision flags
+  5. Return observation with `reset: true`
 
----
-
-### Requirement: COMM-005 - Event Streaming
-The system SHALL support asynchronous event notifications from server to client.
-
-#### Scenario: State Change Events
-- WHEN the robot state changes
-- THEN the server SHALL emit an event notification
-- AND include relevant state information in the event data
-
-#### Scenario: Error Events
-- WHEN an error occurs during operation
-- THEN the server SHALL emit an error event
-- AND include error code, message, and context
-
-#### Scenario: Event Subscription
-- WHEN a client subscribes to specific event types
-- THEN the server SHALL only send subscribed events to that client
-- AND support dynamic subscription changes
+#### Scenario: CONFIG Command
+- WHEN Python sends `{"type": "CONFIG", "simulationMode": true}`
+- THEN Unity SHALL switch to simulation mode (smooth interpolation)
+- AND respond with `{"status": "ok"}`
 
 ---
 
-### Requirement: COMM-006 - Error Handling
-The system SHALL implement robust error handling for communication failures.
+### Requirement: COMM-004 - Threading Model
+The system SHALL handle network I/O on a dedicated thread in Unity.
 
-#### Scenario: Malformed Message
-- WHEN a malformed JSON message is received
-- THEN the receiver SHALL respond with a parse error
-- AND continue operating (not crash)
+#### Scenario: Unity Server Threading
+- WHEN the ZMQ server starts
+- THEN network I/O SHALL run on a background thread
+- AND requests SHALL be queued via ConcurrentQueue
+- AND processing SHALL occur in FixedUpdate (main thread)
+- AND responses SHALL be queued back to the network thread
 
-#### Scenario: Connection Lost
-- WHEN the TCP connection is unexpectedly closed
-- THEN both parties SHALL detect the disconnection
-- AND clean up associated resources
-- AND the Unity simulation SHALL continue operating safely
-
-#### Scenario: Reconnection
-- WHEN a client reconnects after disconnection
-- THEN the server SHALL accept the new connection
-- AND reset any client-specific state
+#### Scenario: Physics Synchronization
+- WHEN a STEP command is processed
+- THEN it SHALL be executed in FixedUpdate
+- AND the response SHALL reflect the state after physics step
+- AND Time.fixedDeltaTime SHALL be 0.02f (50Hz)
 
 ---
 
-### Requirement: COMM-007 - Security
-The system SHALL implement basic security measures for the communication channel.
+### Requirement: COMM-005 - Determinism
+The system SHALL guarantee deterministic simulation for RL training.
 
-#### Scenario: Local Connection Only
-- WHEN the server starts
-- THEN it SHALL by default only accept connections from localhost
-- AND external connections SHALL require explicit configuration
+#### Scenario: Blocking Communication
+- WHEN Python calls `socket.recv()`
+- THEN Python SHALL block until Unity responds
+- AND this SHALL ensure one action per physics step
+- AND training SHALL be reproducible with same seed
 
-#### Scenario: Authentication (Optional)
-- WHEN authentication is enabled
-- THEN clients SHALL provide valid credentials on connection
-- AND unauthorized clients SHALL be rejected
+#### Scenario: Physics Timing
+- WHEN Unity processes requests
+- THEN exactly one physics step SHALL occur per STEP command
+- AND Time.fixedDeltaTime SHALL remain constant
 
 ---
 
 ## Protocol Details
 
-### Connection Parameters
+### ZeroMQ Configuration
 
-| Parameter | Default Value | Description |
-|-----------|---------------|-------------|
-| Host | 127.0.0.1 | Server bind address |
-| Port | 5555 | Server listen port |
-| Timeout | 30000ms | Connection/request timeout |
-| Buffer Size | 65536 bytes | Message buffer size |
-| Max Message Size | 1MB | Maximum allowed message |
+| Parameter | Python (Client) | Unity (Server) |
+|-----------|-----------------|----------------|
+| Socket Type | REQ | REP (ResponseSocket) |
+| Address | tcp://localhost:5555 | tcp://*:5555 |
+| Library | pyzmq | NetMQ |
+| Timeout | 5000ms | 100ms poll |
 
----
+### Message Examples
 
-### Message Structure
-
-#### Request Format
+#### STEP Command
 ```json
 {
-  "id": "uuid-string",
-  "type": "request",
-  "command": "move_to_position",
-  "params": {
-    "x": 0.5,
-    "y": 0.3,
-    "z": 0.2
-  },
-  "timestamp": 1732300800000
+  "type": "STEP",
+  "actions": [5.0, -2.5, 3.0, 1.0],
+  "gripperClose": 0.8
 }
 ```
 
-#### Response Format
+#### STEP Response
 ```json
 {
-  "id": "uuid-string",
-  "type": "response",
-  "status": "success",
-  "data": {
-    "position": {"x": 0.5, "y": 0.3, "z": 0.2},
-    "duration_ms": 1500
-  },
-  "error": null,
-  "timestamp": 1732300801500
+  "jointAngles": [45.0, -30.0, 60.0, 15.0],
+  "tcpPosition": [0.35, 0.25, 0.15],
+  "directionToTarget": [0.57, 0.57, 0.57],
+  "distanceToTarget": 0.12,
+  "gripperState": 0.2,
+  "isGripping": true,
+  "laserHit": true,
+  "laserDistance": 0.05,
+  "collision": false,
+  "targetOrientation": [1.0, 0.0],
+  "reset": false
 }
 ```
 
-#### Event Format
+#### RESET Command
 ```json
 {
-  "type": "event",
-  "event": "motion_complete",
-  "data": {
-    "position": {"x": 0.5, "y": 0.3, "z": 0.2},
-    "success": true
-  },
-  "timestamp": 1732300801500
+  "type": "RESET"
+}
+```
+
+#### CONFIG Command
+```json
+{
+  "type": "CONFIG",
+  "simulationMode": true
 }
 ```
 
 ---
 
-### Framing Protocol
-
-```
-+------------------+------------------+
-| Length (4 bytes) | JSON Message     |
-| Big-endian uint  | UTF-8 encoded    |
-+------------------+------------------+
-```
-
-Example (Python):
-```python
-import struct
-import json
-
-def send_message(sock, message):
-    data = json.dumps(message).encode('utf-8')
-    length = struct.pack('>I', len(data))
-    sock.sendall(length + data)
-
-def receive_message(sock):
-    length_data = sock.recv(4)
-    length = struct.unpack('>I', length_data)[0]
-    data = sock.recv(length)
-    return json.loads(data.decode('utf-8'))
-```
-
----
-
-### Event Types
-
-| Event Type | Description | Data Fields |
-|------------|-------------|-------------|
-| `connected` | Client connected | client_id |
-| `motion_started` | Robot started moving | target, speed |
-| `motion_complete` | Robot reached target | position, success |
-| `collision_warning` | Potential collision detected | location, severity |
-| `gripper_state_changed` | Gripper opened/closed | position, gripping |
-| `error` | Error occurred | code, message |
-| `game_state_changed` | Chess game state changed | fen, last_move |
-
----
-
-### Status Codes
-
-| Status | Description |
-|--------|-------------|
-| `success` | Operation completed successfully |
-| `error` | Operation failed |
-| `pending` | Operation in progress |
-| `queued` | Command queued for execution |
-
----
-
-## Python Client Example
+## Python Client Implementation
 
 ```python
-import socket
-import struct
+import zmq
 import json
-import uuid
-from typing import Optional, Dict, Any
 
-class RobotClient:
-    def __init__(self, host: str = '127.0.0.1', port: int = 5555):
-        self.host = host
-        self.port = port
-        self.sock: Optional[socket.socket] = None
+class UnityConnection:
+    def __init__(self, address="tcp://localhost:5555"):
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.REQ)
+        self.socket.connect(address)
+        self.socket.setsockopt(zmq.RCVTIMEO, 5000)
 
-    def connect(self) -> bool:
-        """Establish connection to Unity server."""
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.settimeout(30.0)
-        self.sock.connect((self.host, self.port))
-        return True
+    def send_command(self, cmd: dict) -> dict:
+        """Send command and wait for response (blocking)."""
+        self.socket.send_string(json.dumps(cmd))
+        response = self.socket.recv_string()
+        return json.loads(response)
 
-    def disconnect(self):
-        """Close the connection."""
-        if self.sock:
-            self.sock.close()
-            self.sock = None
+    def step(self, actions: list, gripper: float) -> dict:
+        return self.send_command({
+            "type": "STEP",
+            "actions": actions,
+            "gripperClose": gripper
+        })
 
-    def send_command(self, command: str, params: Dict[str, Any] = None) -> Dict:
-        """Send a command and wait for response."""
-        message = {
-            'id': str(uuid.uuid4()),
-            'type': 'request',
-            'command': command,
-            'params': params or {},
-            'timestamp': int(time.time() * 1000)
+    def reset(self) -> dict:
+        return self.send_command({"type": "RESET"})
+
+    def set_mode(self, simulation: bool) -> dict:
+        return self.send_command({
+            "type": "CONFIG",
+            "simulationMode": simulation
+        })
+
+    def close(self):
+        self.socket.close()
+        self.context.term()
+```
+
+---
+
+## Unity Server Implementation
+
+```csharp
+using NetMQ;
+using NetMQ.Sockets;
+using System.Threading;
+using System.Collections.Concurrent;
+
+public class ZMQBridge
+{
+    private ResponseSocket server;
+    private ConcurrentQueue<string> requests = new();
+    private ConcurrentQueue<string> responses = new();
+    private bool running;
+
+    public void Start(string address = "tcp://*:5555")
+    {
+        running = true;
+        new Thread(() => ServerLoop(address)).Start();
+    }
+
+    private void ServerLoop(string address)
+    {
+        AsyncIO.ForceDotNet.Force();
+        using (server = new ResponseSocket())
+        {
+            server.Bind(address);
+            while (running)
+            {
+                if (server.TryReceiveFrameString(
+                    TimeSpan.FromMilliseconds(100), out string req))
+                {
+                    requests.Enqueue(req);
+
+                    // Wait for main thread response
+                    while (!responses.TryDequeue(out string resp))
+                    {
+                        Thread.Sleep(1);
+                        if (!running) return;
+                    }
+                    server.SendFrame(resp);
+                }
+            }
         }
+        NetMQConfig.Cleanup();
+    }
 
-        # Send
-        data = json.dumps(message).encode('utf-8')
-        self.sock.sendall(struct.pack('>I', len(data)) + data)
+    // Call from FixedUpdate
+    public bool TryGetRequest(out string request)
+        => requests.TryDequeue(out request);
 
-        # Receive
-        length_data = self.sock.recv(4)
-        length = struct.unpack('>I', length_data)[0]
-        response_data = self.sock.recv(length)
+    public void SendResponse(string response)
+        => responses.Enqueue(response);
 
-        return json.loads(response_data.decode('utf-8'))
-
-    # Convenience methods
-    def move_to(self, x: float, y: float, z: float) -> Dict:
-        return self.send_command('move_to_position', {'x': x, 'y': y, 'z': z})
-
-    def grip(self) -> Dict:
-        return self.send_command('grip')
-
-    def release(self) -> Dict:
-        return self.send_command('release')
-
-    def get_position(self) -> Dict:
-        return self.send_command('get_position')
+    public void Stop()
+    {
+        running = false;
+    }
+}
 ```
 
 ---
 
-## Unity Server Considerations
+## Error Handling
 
-The Unity server implementation SHALL:
+| Error | Python Handling | Unity Handling |
+|-------|-----------------|----------------|
+| Connection failed | Retry with backoff | Log and continue |
+| Timeout | Raise exception | N/A |
+| Malformed JSON | Raise exception | Return error response |
+| Unknown command | Log warning | Return error response |
 
-1. Run network operations on a separate thread to avoid blocking the main Unity thread
-2. Use thread-safe queues for passing commands to the simulation
-3. Implement proper synchronization for shared state
-4. Handle client disconnection gracefully
-5. Log all communication for debugging purposes
+---
+
+## Performance Considerations
+
+1. **Latency**: ZeroMQ optimized for low-latency messaging
+2. **Throughput**: Single request per physics step (~50 req/sec)
+3. **Memory**: Minimal allocation per message
+4. **Threading**: Network I/O isolated from physics thread
 
 ---
 
 ## Related Specifications
 
 - [system.md](system.md) - Core system specification
-- [robot-interface.md](robot-interface.md) - Robot command reference
-- [chess-system.md](chess-system.md) - Chess-specific commands
+- [robot-interface.md](robot-interface.md) - RL observation/action spaces
+- [chess-system.md](chess-system.md) - Chess-specific extensions

@@ -1,179 +1,323 @@
-# Robot Interface Specification: LLM Robot Control
+# Robot Interface Specification: RL Action and Observation Spaces
 
-**Version:** 1.0.0
+**Version:** 2.0.0
 **Last Updated:** 2025-11-22
 **Status:** Active
 
 ## Overview
 
-This specification defines the interface through which Large Language Models (LLMs) can control robotic manipulators in the Unity simulation. The interface provides high-level commands that abstract the complexity of robot kinematics and motion planning.
+This specification defines the Reinforcement Learning interface for controlling the 4-DOF robotic arm in Unity. It specifies the observation space, action space, and reward function used by Gymnasium environments and RL algorithms like PPO.
 
 ---
 
 ## Requirements
 
-### Requirement: INTERFACE-001 - Command Reception
-The system SHALL receive and process robot control commands from external LLM agents.
+### Requirement: INTERFACE-001 - Observation Space
+The system SHALL provide a 15-dimensional normalized observation vector.
 
-#### Scenario: Move to Position Command
-- WHEN an LLM sends a `move_to_position` command with coordinates (x, y, z)
-- THEN the robot SHALL compute the inverse kinematics
-- AND move the end effector to the specified position
-- AND return a success/failure status
+#### Scenario: Observation Vector Construction
+- WHEN Unity builds an observation
+- THEN it SHALL include the following components (in order):
+  1. Joint angles (4 values, normalized by limits)
+  2. Gripper state (1 value, 0=open, 1=closed)
+  3. TCP position (3 values, normalized by workspace)
+  4. Direction to target (3 values, unit vector)
+  5. Laser distance (1 value, normalized)
+  6. Is gripping flag (1 value, 0 or 1)
+  7. Target orientation (2 values, one-hot)
 
-#### Scenario: Move to Named Location
-- WHEN an LLM sends a `move_to` command with a named location (e.g., "home", "pickup_zone")
-- THEN the robot SHALL retrieve the predefined coordinates
-- AND execute the movement to that location
+#### Scenario: Normalization Bounds
+- WHEN observation values are computed
+- THEN all values SHALL be clipped to range [-1, 1]
+- AND joint angles SHALL be divided by their respective limits
+- AND TCP position SHALL be divided by workspace radius (0.6m)
+- AND laser distance SHALL be divided by max range (1.0m)
 
-#### Scenario: Invalid Command Handling
-- WHEN an LLM sends a malformed or invalid command
-- THEN the system SHALL return an error response
-- AND the robot SHALL remain in its current position
-
----
-
-### Requirement: INTERFACE-002 - Gripper Control
-The system SHALL provide gripper control capabilities for object manipulation.
-
-#### Scenario: Grip Object
-- WHEN an LLM sends a `grip` command
-- THEN the gripper SHALL close to grasp an object
-- AND return the grip status (success/failure/no_object)
-
-#### Scenario: Release Object
-- WHEN an LLM sends a `release` command
-- THEN the gripper SHALL open to release the held object
-- AND return confirmation of the release
-
-#### Scenario: Set Grip Force
-- WHEN an LLM specifies a grip force parameter
-- THEN the gripper SHALL adjust to the specified force level
-- AND maintain that force during the grip operation
+#### Scenario: Target Orientation Encoding
+- WHEN target is vertical
+- THEN targetOrientation SHALL be [1, 0]
+- WHEN target is horizontal
+- THEN targetOrientation SHALL be [0, 1]
 
 ---
 
-### Requirement: INTERFACE-003 - State Queries
-The system SHALL respond to state query requests from LLM agents.
+### Requirement: INTERFACE-002 - Action Space
+The system SHALL accept a 5-dimensional continuous action vector.
 
-#### Scenario: Query Robot Position
-- WHEN an LLM sends a `get_position` query
-- THEN the system SHALL return the current end effector position
-- AND include orientation data (quaternion or euler angles)
+#### Scenario: Action Vector Interpretation
+- WHEN an action vector is received
+- THEN it SHALL be interpreted as:
+  1. Delta angle for Axis 1 (index 0)
+  2. Delta angle for Axis 2 (index 1)
+  3. Delta angle for Axis 3 (index 2)
+  4. Delta angle for Axis 4 (index 3)
+  5. Gripper command (index 4)
 
-#### Scenario: Query Joint States
-- WHEN an LLM sends a `get_joints` query
-- THEN the system SHALL return all joint angles
-- AND include joint velocity information if available
+#### Scenario: Action Scaling
+- WHEN raw actions are in range [-1, 1]
+- THEN joint deltas SHALL be scaled by max_delta (10 degrees)
+- AND gripper command > 0.5 SHALL close the gripper
+- AND gripper command <= 0.5 SHALL open the gripper
 
-#### Scenario: Query Gripper State
-- WHEN an LLM sends a `get_gripper_state` query
-- THEN the system SHALL return the gripper position (open percentage)
-- AND indicate if an object is currently gripped
-
----
-
-### Requirement: INTERFACE-004 - Motion Parameters
-The system SHALL allow configuration of motion parameters by LLM agents.
-
-#### Scenario: Set Movement Speed
-- WHEN an LLM specifies a `speed` parameter (0.0 to 1.0)
-- THEN subsequent movements SHALL execute at the specified speed percentage
-- AND return acknowledgment of the speed change
-
-#### Scenario: Set Acceleration Profile
-- WHEN an LLM specifies acceleration and deceleration values
-- THEN the motion controller SHALL use these parameters
-- AND ensure smooth motion transitions
+#### Scenario: Joint Limits
+- WHEN scaled actions would exceed joint limits
+- THEN the joint position SHALL be clamped to valid range
+- AND no error SHALL be raised
 
 ---
 
-### Requirement: INTERFACE-005 - Feedback and Events
-The system SHALL provide real-time feedback and event notifications to LLM agents.
+### Requirement: INTERFACE-003 - Reward Function
+The system SHALL compute rewards based on task progress and safety.
 
-#### Scenario: Motion Complete Event
-- WHEN a robot completes a commanded movement
-- THEN the system SHALL emit a `motion_complete` event
-- AND include the final position achieved
+#### Scenario: Distance Reward (R_dist)
+- WHEN the TCP moves closer to target
+- THEN reward SHALL increase proportionally
+- AND reward = (prev_distance - current_distance) * 10.0
 
-#### Scenario: Collision Detection
-- WHEN the robot detects a potential collision
-- THEN the system SHALL emit a `collision_warning` event
-- AND optionally halt the current motion
+#### Scenario: Alignment Reward (R_align)
+- WHEN TCP velocity aligns with target direction
+- THEN reward SHALL be positive
+- AND reward = dot(velocity_normalized, direction) * 0.5
+- WHERE velocity = current_tcp - prev_tcp
 
-#### Scenario: Error Notification
-- WHEN an error occurs during robot operation
-- THEN the system SHALL emit an `error` event
-- AND include error code and description
+#### Scenario: Grasp Reward (R_grasp)
+- WHEN laser_distance < 0.05m AND gripper is closed AND object is gripped
+- THEN reward SHALL be +100
+- AND info['success'] SHALL be True
 
----
+#### Scenario: Collision Penalty (R_penalty)
+- WHEN robot collides with non-target object
+- THEN reward SHALL be -100
+- AND episode SHALL terminate (done=True)
+- AND info['collision'] SHALL be True
 
-## Command Reference
-
-### Movement Commands
-
-| Command | Parameters | Description |
-|---------|------------|-------------|
-| `move_to_position` | x, y, z, [rx, ry, rz] | Move to Cartesian coordinates |
-| `move_to` | location_name | Move to predefined location |
-| `move_joints` | j1, j2, j3, j4, j5, j6 | Move to joint configuration |
-| `move_linear` | x, y, z, [speed] | Linear interpolated movement |
-| `move_relative` | dx, dy, dz | Relative movement from current position |
-
-### Gripper Commands
-
-| Command | Parameters | Description |
-|---------|------------|-------------|
-| `grip` | [force] | Close gripper |
-| `release` | - | Open gripper |
-| `set_gripper` | position (0-100) | Set gripper to specific position |
-
-### Query Commands
-
-| Command | Returns | Description |
-|---------|---------|-------------|
-| `get_position` | {x, y, z, rx, ry, rz} | Current end effector pose |
-| `get_joints` | {j1, j2, ...} | Current joint angles |
-| `get_gripper_state` | {position, is_gripping} | Gripper status |
-| `get_workspace` | {min, max} | Robot workspace bounds |
+#### Scenario: Total Reward
+- WHEN calculating step reward
+- THEN R_total = R_dist + R_align + R_grasp + R_penalty
 
 ---
 
-## Response Format
+### Requirement: INTERFACE-004 - Episode Management
+The system SHALL manage RL episode boundaries correctly.
 
-All commands SHALL return responses in the following JSON format:
+#### Scenario: Episode Termination
+- WHEN collision occurs (non-target)
+- THEN terminated SHALL be True
+- AND truncated SHALL be False
 
-```json
-{
-  "command": "move_to_position",
-  "status": "success|error|in_progress",
-  "timestamp": 1732300800000,
-  "data": {
-    "position": {"x": 0.5, "y": 0.3, "z": 0.2},
-    "duration_ms": 1500
-  },
-  "error": null
-}
+#### Scenario: Episode Truncation
+- WHEN step count exceeds max_episode_steps (500)
+- THEN truncated SHALL be True
+- AND terminated SHALL be False
+
+#### Scenario: Episode Reset
+- WHEN reset() is called
+- THEN robot SHALL return to home position
+- AND new target SHALL spawn at random location
+- AND step counter SHALL reset to 0
+- AND collision flags SHALL be cleared
+
+---
+
+### Requirement: INTERFACE-005 - Control Modes
+The system SHALL support two operational modes.
+
+#### Scenario: Training Mode
+- WHEN mode is Training
+- THEN joint positions SHALL change instantly (teleport)
+- AND self-collisions SHALL be ignored
+- AND this SHALL enable fast episode collection
+
+#### Scenario: Simulation Mode
+- WHEN mode is Simulation
+- THEN joint positions SHALL interpolate smoothly
+- AND max velocity SHALL be limited (90 deg/sec)
+- AND this SHALL demonstrate realistic behavior
+
+---
+
+## Observation Space Definition
+
+### Gymnasium Space
+```python
+observation_space = spaces.Box(
+    low=-1.0,
+    high=1.0,
+    shape=(15,),
+    dtype=np.float32
+)
+```
+
+### Component Breakdown
+
+| Index | Component | Raw Range | Normalization |
+|-------|-----------|-----------|---------------|
+| 0 | Axis 1 angle | -180° to +180° | / 180 |
+| 1 | Axis 2 angle | -90° to +90° | / 90 |
+| 2 | Axis 3 angle | -135° to +135° | / 135 |
+| 3 | Axis 4 angle | -180° to +180° | / 180 |
+| 4 | Gripper state | 0 to 1 | direct |
+| 5 | TCP X | -0.6m to +0.6m | / 0.6 |
+| 6 | TCP Y | 0 to 0.6m | / 0.6 |
+| 7 | TCP Z | -0.6m to +0.6m | / 0.6 |
+| 8 | Dir X | -1 to +1 | direct |
+| 9 | Dir Y | -1 to +1 | direct |
+| 10 | Dir Z | -1 to +1 | direct |
+| 11 | Laser distance | 0 to 1m | / 1.0 |
+| 12 | Is gripping | 0 or 1 | direct |
+| 13 | Target vertical | 0 or 1 | direct |
+| 14 | Target horizontal | 0 or 1 | direct |
+
+---
+
+## Action Space Definition
+
+### Gymnasium Space
+```python
+action_space = spaces.Box(
+    low=-1.0,
+    high=1.0,
+    shape=(5,),
+    dtype=np.float32
+)
+```
+
+### Component Breakdown
+
+| Index | Component | Raw Range | Scaling |
+|-------|-----------|-----------|---------|
+| 0 | Delta Axis 1 | -1 to +1 | × 10° |
+| 1 | Delta Axis 2 | -1 to +1 | × 10° |
+| 2 | Delta Axis 3 | -1 to +1 | × 10° |
+| 3 | Delta Axis 4 | -1 to +1 | × 10° |
+| 4 | Gripper | -1 to +1 | >0.5 = close |
+
+---
+
+## Reward Function Details
+
+### Mathematical Definition
+
+$$R_{total} = R_{dist} + R_{align} + R_{grasp} + R_{penalty}$$
+
+Where:
+- $R_{dist} = (d_{t-1} - d_t) \times 10.0$
+- $R_{align} = \frac{\vec{v}}{|\vec{v}|} \cdot \vec{d} \times 0.5$ (if $|\vec{v}| > \epsilon$)
+- $R_{grasp} = 100.0$ (if laser < 0.05m AND gripping)
+- $R_{penalty} = -100.0$ (if collision with non-target)
+
+### Reward Shaping Rationale
+
+| Component | Purpose | Magnitude |
+|-----------|---------|-----------|
+| R_dist | Encourage approaching target | ~0-5 per step |
+| R_align | Discourage inefficient paths | ~0-0.5 per step |
+| R_grasp | Terminal success signal | +100 once |
+| R_penalty | Safety constraint | -100 terminal |
+
+---
+
+## Curriculum Learning
+
+### Lesson Progression
+
+| Lesson | Goal | R_grasp Condition | Steps |
+|--------|------|-------------------|-------|
+| 1: Touch | TCP reaches target | distance < 0.1m | 100K |
+| 2: Grasp | Grip the object | laser < 0.05m + grip | 200K |
+| 3: Pick & Place | Full task | lift + place | 500K |
+
+### Reward Modification per Lesson
+
+```python
+# Lesson 1: Touch only
+if lesson == 1:
+    if distance_to_target < 0.1:
+        reward += 50  # Touch bonus
+
+# Lesson 2+: Full grasp reward
+if lesson >= 2:
+    if laser_distance < 0.05 and is_gripping:
+        reward += 100  # Grasp bonus
 ```
 
 ---
 
-## Error Codes
+## State Diagram
 
-| Code | Name | Description |
-|------|------|-------------|
-| E001 | INVALID_COMMAND | Command not recognized |
-| E002 | OUT_OF_REACH | Target position is outside workspace |
-| E003 | COLLISION_DETECTED | Path would cause collision |
-| E004 | IK_NO_SOLUTION | Inverse kinematics has no solution |
-| E005 | JOINT_LIMIT | Joint limit would be exceeded |
-| E006 | GRIPPER_FAULT | Gripper operation failed |
-| E007 | TIMEOUT | Operation timed out |
+```
+                    ┌─────────────┐
+                    │   RESET     │
+                    └──────┬──────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+           ┌───────│   ACTIVE    │◄──────┐
+           │       └──────┬──────┘       │
+           │              │              │
+           │     STEP (action)           │
+           │              │              │
+           ▼              ▼              │
+    ┌─────────────┐ ┌─────────────┐      │
+    │  COLLISION  │ │  CONTINUE   │──────┘
+    │ (done=True) │ │             │
+    └─────────────┘ └──────┬──────┘
+                           │
+                    max_steps reached?
+                           │
+                    ┌──────┴──────┐
+                    │  TRUNCATED  │
+                    │(trunc=True) │
+                    └─────────────┘
+```
+
+---
+
+## Python Implementation Example
+
+```python
+def _calculate_reward(self, obs: Dict) -> Tuple[float, bool, Dict]:
+    reward = 0.0
+    done = False
+    info = {}
+
+    distance = obs['distanceToTarget']
+    tcp = np.array(obs['tcpPosition'])
+    direction = np.array(obs['directionToTarget'])
+
+    # R_dist: Distance improvement
+    if self.prev_distance is not None:
+        r_dist = (self.prev_distance - distance) * 10.0
+        reward += r_dist
+
+    # R_align: Velocity alignment
+    velocity = tcp - self.prev_tcp
+    if np.linalg.norm(velocity) > 1e-6:
+        v_norm = velocity / np.linalg.norm(velocity)
+        r_align = np.dot(v_norm, direction) * 0.5
+        reward += r_align
+
+    # R_grasp: Success
+    if obs['laserDistance'] < 0.05 and obs['isGripping']:
+        reward += 100.0
+        info['success'] = True
+
+    # R_penalty: Collision
+    if obs['collision']:
+        reward -= 100.0
+        done = True
+        info['collision'] = True
+
+    self.prev_distance = distance
+    self.prev_tcp = tcp.copy()
+
+    return reward, done, info
+```
 
 ---
 
 ## Related Specifications
 
 - [system.md](system.md) - Core system specification
-- [communication.md](communication.md) - Communication protocol details
-- [chess-system.md](chess-system.md) - Chess-specific robot interface
+- [communication.md](communication.md) - ZeroMQ protocol details
+- [chess-system.md](chess-system.md) - Chess-specific interface extensions
