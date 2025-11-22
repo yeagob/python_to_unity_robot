@@ -160,32 +160,32 @@ namespace RobotSimulation.Models
 
         public float[] JointAngles
         {
-            get { return _jointAngles; }
-            set { _jointAngles = value; }
+            get => _jointAngles;
+            set => _jointAngles = value;
         }
 
         public Vector3 ToolCenterPointPosition
         {
-            get { return _toolCenterPointPosition; }
-            set { _toolCenterPointPosition = value; }
+            get => _toolCenterPointPosition;
+            set => _toolCenterPointPosition = value;
         }
 
         public Quaternion ToolCenterPointRotation
         {
-            get { return _toolCenterPointRotation; }
-            set { _toolCenterPointRotation = value; }
+            get => _toolCenterPointRotation;
+            set => _toolCenterPointRotation = value;
         }
 
         public float GripperOpenPercentage
         {
-            get { return _gripperOpenPercentage; }
-            set { _gripperOpenPercentage = value; }
+            get => _gripperOpenPercentage;
+            set => _gripperOpenPercentage = value;
         }
 
         public bool IsGrippingObject
         {
-            get { return _isGrippingObject; }
-            set { _isGrippingObject = value; }
+            get => _isGrippingObject;
+            set => _isGrippingObject = value;
         }
 
         public RobotStateModel()
@@ -202,22 +202,24 @@ namespace RobotSimulation.Models
 
 ### ObservationModel.cs
 ```csharp
+using UnityEngine;
+
 namespace RobotSimulation.Models
 {
     [System.Serializable]
     public sealed class ObservationModel
     {
-        public float[] JointAngles { get; set; }
-        public float[] ToolCenterPointPosition { get; set; }
-        public float[] DirectionToTarget { get; set; }
-        public float DistanceToTarget { get; set; }
-        public float GripperState { get; set; }
-        public bool IsGrippingObject { get; set; }
-        public bool LaserSensorHit { get; set; }
-        public float LaserSensorDistance { get; set; }
-        public bool CollisionDetected { get; set; }
-        public float[] TargetOrientationOneHot { get; set; }
-        public bool IsResetFrame { get; set; }
+        public float[] JointAngles;
+        public float[] ToolCenterPointPosition;
+        public float[] DirectionToTarget;
+        public float DistanceToTarget;
+        public float GripperState;
+        public bool IsGrippingObject;
+        public bool LaserSensorHit;
+        public float LaserSensorDistance;
+        public bool CollisionDetected;
+        public float[] TargetOrientationOneHot;
+        public bool IsResetFrame;
 
         public ObservationModel()
         {
@@ -226,12 +228,17 @@ namespace RobotSimulation.Models
             DirectionToTarget = new float[3];
             TargetOrientationOneHot = new float[2];
         }
+
+        public string ToJson() => JsonUtility.ToJson(this);
+
+        public static ObservationModel FromJson(string json) => JsonUtility.FromJson<ObservationModel>(json);
     }
 }
 ```
 
 ### CommandModel.cs
 ```csharp
+using UnityEngine;
 using RobotSimulation.Enums;
 
 namespace RobotSimulation.Models
@@ -239,25 +246,20 @@ namespace RobotSimulation.Models
     [System.Serializable]
     public sealed class CommandModel
     {
-        public string Type { get; set; }
-        public float[] Actions { get; set; }
-        public float GripperCloseValue { get; set; }
-        public bool SimulationModeEnabled { get; set; }
+        public string Type;
+        public float[] Actions;
+        public float GripperCloseValue;
+        public bool SimulationModeEnabled;
 
-        public CommandType GetCommandType()
+        public CommandType GetCommandType() => Type switch
         {
-            switch (Type)
-            {
-                case "STEP":
-                    return CommandType.Step;
-                case "RESET":
-                    return CommandType.Reset;
-                case "CONFIG":
-                    return CommandType.Configuration;
-                default:
-                    return CommandType.Step;
-            }
-        }
+            "STEP" => CommandType.Step,
+            "RESET" => CommandType.Reset,
+            "CONFIG" => CommandType.Configuration,
+            _ => CommandType.Step
+        };
+
+        public static CommandModel FromJson(string json) => JsonUtility.FromJson<CommandModel>(json);
     }
 }
 ```
@@ -281,59 +283,56 @@ namespace RobotSimulation.Models
 
         public float MaximumServoSpeedDegreesPerSecond
         {
-            get { return _maximumServoSpeedDegreesPerSecond; }
-            set { _maximumServoSpeedDegreesPerSecond = value; }
+            get => _maximumServoSpeedDegreesPerSecond;
+            set => _maximumServoSpeedDegreesPerSecond = value;
         }
 
         public float ArticulationDriveStiffness
         {
-            get { return _articulationDriveStiffness; }
-            set { _articulationDriveStiffness = value; }
+            get => _articulationDriveStiffness;
+            set => _articulationDriveStiffness = value;
         }
 
         public float ArticulationDriveDamping
         {
-            get { return _articulationDriveDamping; }
-            set { _articulationDriveDamping = value; }
+            get => _articulationDriveDamping;
+            set => _articulationDriveDamping = value;
         }
 
         public float PhysicsTimeStepSeconds
         {
-            get { return _physicsTimeStepSeconds; }
-            set { _physicsTimeStepSeconds = value; }
+            get => _physicsTimeStepSeconds;
+            set => _physicsTimeStepSeconds = value;
         }
 
         public int NetworkPortNumber
         {
-            get { return _networkPortNumber; }
-            set { _networkPortNumber = value; }
+            get => _networkPortNumber;
+            set => _networkPortNumber = value;
         }
 
         public float GripperClosedPositionMeters
         {
-            get { return _gripperClosedPositionMeters; }
-            set { _gripperClosedPositionMeters = value; }
+            get => _gripperClosedPositionMeters;
+            set => _gripperClosedPositionMeters = value;
         }
 
         public float GripperOpenPositionMeters
         {
-            get { return _gripperOpenPositionMeters; }
-            set { _gripperOpenPositionMeters = value; }
+            get => _gripperOpenPositionMeters;
+            set => _gripperOpenPositionMeters = value;
         }
 
-        public static ConfigurationModel CreateDefault()
+        public static ConfigurationModel CreateDefault() => new ConfigurationModel
         {
-            return new ConfigurationModel
-            {
-                _maximumServoSpeedDegreesPerSecond = 90.0f,
-                _articulationDriveStiffness = 10000.0f,
-                _articulationDriveDamping = 100.0f,
-                _physicsTimeStepSeconds = 0.02f,
-                _networkPortNumber = 5555,
-                _gripperClosedPositionMeters = 0.0f,
-                _gripperOpenPositionMeters = 0.05f
-            };
-        }
+            _maximumServoSpeedDegreesPerSecond = 90.0f,
+            _articulationDriveStiffness = 10000.0f,
+            _articulationDriveDamping = 100.0f,
+            _physicsTimeStepSeconds = 0.02f,
+            _networkPortNumber = 5555,
+            _gripperClosedPositionMeters = 0.0f,
+            _gripperOpenPositionMeters = 0.05f
+        };
     }
 }
 ```
@@ -445,10 +444,7 @@ namespace RobotSimulation.Services
         private RobotControlMode _currentControlMode;
         private float[] _targetJointAngles;
 
-        public RobotControlMode CurrentControlMode
-        {
-            get { return _currentControlMode; }
-        }
+        public RobotControlMode CurrentControlMode => _currentControlMode;
 
         public RobotService(
             ArticulationBody[] jointBodies,
@@ -612,20 +608,11 @@ namespace RobotSimulation.Services
         private float _detectedDistance;
         private string _detectedObjectTag;
 
-        public bool HasDetectedObject
-        {
-            get { return _hasDetectedObject; }
-        }
+        public bool HasDetectedObject => _hasDetectedObject;
 
-        public float DetectedDistance
-        {
-            get { return _detectedDistance; }
-        }
+        public float DetectedDistance => _detectedDistance;
 
-        public string DetectedObjectTag
-        {
-            get { return _detectedObjectTag; }
-        }
+        public string DetectedObjectTag => _detectedObjectTag;
 
         public void Initialize(Transform sensorOrigin, float maximumRange)
         {
@@ -685,22 +672,11 @@ namespace RobotSimulation.Services
         private const float MAXIMUM_SPAWN_HEIGHT = 0.4f;
         private const string TARGET_TAG = "Target";
 
-        public Transform CurrentTargetTransform
-        {
-            get
-            {
-                if (_currentTargetInstance == null)
-                {
-                    return null;
-                }
-                return _currentTargetInstance.transform;
-            }
-        }
+        public Transform CurrentTargetTransform => _currentTargetInstance != null
+            ? _currentTargetInstance.transform
+            : null;
 
-        public bool IsTargetOrientationVertical
-        {
-            get { return _isCurrentTargetVertical; }
-        }
+        public bool IsTargetOrientationVertical => _isCurrentTargetVertical;
 
         public void Initialize(GameObject targetPrefab, Transform robotBaseTransform)
         {
@@ -844,20 +820,11 @@ namespace RobotSimulation.Controllers
         private bool _collisionDetectedThisFrame;
         private CollisionType _lastCollisionType;
 
-        public IRobotService RobotService
-        {
-            get { return _robotService; }
-        }
+        public IRobotService RobotService => _robotService;
 
-        public bool CollisionDetectedThisFrame
-        {
-            get { return _collisionDetectedThisFrame; }
-        }
+        public bool CollisionDetectedThisFrame => _collisionDetectedThisFrame;
 
-        public CollisionType LastCollisionType
-        {
-            get { return _lastCollisionType; }
-        }
+        public CollisionType LastCollisionType => _lastCollisionType;
 
         public void InitializeController(IRobotService robotService)
         {
@@ -962,10 +929,7 @@ namespace RobotSimulation.Controllers
 
         private ISensorService _sensorService;
 
-        public ISensorService SensorService
-        {
-            get { return _sensorService; }
-        }
+        public ISensorService SensorService => _sensorService;
 
         public void InitializeController(ISensorService sensorService)
         {
@@ -1006,10 +970,7 @@ namespace RobotSimulation.Controllers
 
         private ITargetService _targetService;
 
-        public ITargetService TargetService
-        {
-            get { return _targetService; }
-        }
+        public ITargetService TargetService => _targetService;
 
         public void InitializeController(ITargetService targetService)
         {
@@ -1039,9 +1000,9 @@ namespace RobotSimulation.Controllers
 using System;
 using System.Threading;
 using System.Collections.Concurrent;
+using UnityEngine;
 using NetMQ;
 using NetMQ.Sockets;
-using Newtonsoft.Json;
 using RobotSimulation.Models;
 using RobotSimulation.Services.Interfaces;
 
@@ -1056,10 +1017,7 @@ namespace RobotSimulation.Services
         private volatile bool _isRunning;
         private int _portNumber;
 
-        public bool IsConnected
-        {
-            get { return _isRunning; }
-        }
+        public bool IsConnected => _isRunning;
 
         public event Action<CommandModel> OnCommandReceived;
 
@@ -1074,14 +1032,16 @@ namespace RobotSimulation.Services
         {
             _portNumber = portNumber;
             _isRunning = true;
-            _networkThread = new Thread(ExecuteNetworkLoop);
-            _networkThread.IsBackground = true;
+            _networkThread = new Thread(ExecuteNetworkLoop)
+            {
+                IsBackground = true
+            };
             _networkThread.Start();
         }
 
         public void SendObservation(ObservationModel observation)
         {
-            string serializedObservation = JsonConvert.SerializeObject(observation);
+            string serializedObservation = observation.ToJson();
             _outgoingResponseQueue.Enqueue(serializedObservation);
         }
 
@@ -1089,7 +1049,7 @@ namespace RobotSimulation.Services
         {
             _isRunning = false;
 
-            if (_networkThread != null && _networkThread.IsAlive)
+            if (_networkThread is { IsAlive: true })
             {
                 _networkThread.Join(1000);
             }
@@ -1098,21 +1058,17 @@ namespace RobotSimulation.Services
         public bool TryReceiveCommand(out CommandModel command)
         {
             command = null;
-            string requestJson;
 
-            if (_incomingRequestQueue.TryDequeue(out requestJson))
+            if (_incomingRequestQueue.TryDequeue(out string requestJson))
             {
-                command = JsonConvert.DeserializeObject<CommandModel>(requestJson);
+                command = CommandModel.FromJson(requestJson);
                 return true;
             }
 
             return false;
         }
 
-        public void SendResponse(string jsonResponse)
-        {
-            _outgoingResponseQueue.Enqueue(jsonResponse);
-        }
+        public void SendResponse(string jsonResponse) => _outgoingResponseQueue.Enqueue(jsonResponse);
 
         private void ExecuteNetworkLoop()
         {
@@ -1120,15 +1076,14 @@ namespace RobotSimulation.Services
 
             using (_responseSocket = new ResponseSocket())
             {
-                string bindAddress = string.Format("tcp://*:{0}", _portNumber);
+                string bindAddress = $"tcp://*:{_portNumber}";
                 _responseSocket.Bind(bindAddress);
 
                 while (_isRunning)
                 {
-                    string receivedRequest;
                     bool didReceiveRequest = _responseSocket.TryReceiveFrameString(
                         TimeSpan.FromMilliseconds(100),
-                        out receivedRequest);
+                        out string receivedRequest);
 
                     if (didReceiveRequest)
                     {
@@ -1143,9 +1098,7 @@ namespace RobotSimulation.Services
 
         private void WaitForAndSendResponse()
         {
-            string responseToSend;
-
-            while (!_outgoingResponseQueue.TryDequeue(out responseToSend))
+            while (!_outgoingResponseQueue.TryDequeue(out string responseToSend))
             {
                 Thread.Sleep(1);
 
@@ -1168,7 +1121,6 @@ namespace RobotSimulation.Services
 ### GameManager.cs
 ```csharp
 using UnityEngine;
-using Newtonsoft.Json;
 using RobotSimulation.Controllers;
 using RobotSimulation.Enums;
 using RobotSimulation.Events;
@@ -1314,17 +1266,19 @@ namespace RobotSimulation.Bootstrap
 
         private void HandleConfigurationCommand(CommandModel command)
         {
-            if (command.SimulationModeEnabled)
-            {
-                _currentControlMode = RobotControlMode.Simulation;
-            }
-            else
-            {
-                _currentControlMode = RobotControlMode.Training;
-            }
+            _currentControlMode = command.SimulationModeEnabled
+                ? RobotControlMode.Simulation
+                : RobotControlMode.Training;
 
-            string responseJson = JsonConvert.SerializeObject(new { status = "ok" });
+            ConfigurationResponse response = new ConfigurationResponse { status = "ok" };
+            string responseJson = JsonUtility.ToJson(response);
             _networkService.SendResponse(responseJson);
+        }
+
+        [System.Serializable]
+        private sealed class ConfigurationResponse
+        {
+            public string status;
         }
 
         private ObservationModel BuildObservationModel(bool isResetFrame)
