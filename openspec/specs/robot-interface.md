@@ -1,24 +1,39 @@
 # Robot Interface Specification: RL Action and Observation Spaces
 
-**Version:** 2.0.0
+**Version:** 3.0.0
 **Last Updated:** 2025-11-22
 **Status:** Active
 
 ## Overview
 
-This specification defines the Reinforcement Learning interface for controlling the 4-DOF robotic arm in Unity. It specifies the observation space, action space, and reward function used by Gymnasium environments and RL algorithms like PPO.
+This specification defines the Reinforcement Learning interface for controlling the 6-DOF robotic arm in Unity. It specifies the observation space, action space, and reward function used by Gymnasium environments and RL algorithms like PPO.
+
+---
+
+## Robot Joint Configuration
+
+The robot has 6 axes with the following constraints:
+
+| Axis | Rotation Axis | Range | Description |
+|------|---------------|-------|-------------|
+| 1 | Y | ±90° (180° total) | Base rotation |
+| 2 | X | ±90° (180° total) | Shoulder joint |
+| 3 | X | ±90° (180° total) | Elbow joint |
+| 4 | X | ±180° (360° total) | Wrist rotation (head axis) |
+| 5 | Z | ±90° (180° total) | Wrist bend |
+| 6 | X | 0° or 90° (discrete) | Gripper orientation (0°=vertical, 90°=horizontal)
 
 ---
 
 ## Requirements
 
 ### Requirement: INTERFACE-001 - Observation Space
-The system SHALL provide a 15-dimensional normalized observation vector.
+The system SHALL provide a 17-dimensional normalized observation vector.
 
 #### Scenario: Observation Vector Construction
 - WHEN Unity builds an observation
 - THEN it SHALL include the following components (in order):
-  1. Joint angles (4 values, normalized by limits)
+  1. Joint angles (6 values, normalized by limits)
   2. Gripper state (1 value, 0=open, 1=closed)
   3. TCP position (3 values, normalized by workspace)
   4. Direction to target (3 values, unit vector)
@@ -42,16 +57,18 @@ The system SHALL provide a 15-dimensional normalized observation vector.
 ---
 
 ### Requirement: INTERFACE-002 - Action Space
-The system SHALL accept a 5-dimensional continuous action vector.
+The system SHALL accept a 7-dimensional action vector (6 continuous + 1 discrete).
 
 #### Scenario: Action Vector Interpretation
 - WHEN an action vector is received
 - THEN it SHALL be interpreted as:
-  1. Delta angle for Axis 1 (index 0)
-  2. Delta angle for Axis 2 (index 1)
-  3. Delta angle for Axis 3 (index 2)
-  4. Delta angle for Axis 4 (index 3)
-  5. Gripper command (index 4)
+  1. Delta angle for Axis 1 (index 0) - continuous
+  2. Delta angle for Axis 2 (index 1) - continuous
+  3. Delta angle for Axis 3 (index 2) - continuous
+  4. Delta angle for Axis 4 (index 3) - continuous
+  5. Delta angle for Axis 5 (index 4) - continuous
+  6. Axis 6 orientation (index 5) - discrete: 0=vertical, 1=horizontal
+  7. Gripper command (index 6) - continuous threshold
 
 #### Scenario: Action Scaling
 - WHEN raw actions are in range [-1, 1]
@@ -143,7 +160,7 @@ The system SHALL support two operational modes.
 observation_space = spaces.Box(
     low=-1.0,
     high=1.0,
-    shape=(15,),
+    shape=(17,),
     dtype=np.float32
 )
 ```
@@ -152,21 +169,23 @@ observation_space = spaces.Box(
 
 | Index | Component | Raw Range | Normalization |
 |-------|-----------|-----------|---------------|
-| 0 | Axis 1 angle | -180° to +180° | / 180 |
-| 1 | Axis 2 angle | -90° to +90° | / 90 |
-| 2 | Axis 3 angle | -135° to +135° | / 135 |
-| 3 | Axis 4 angle | -180° to +180° | / 180 |
-| 4 | Gripper state | 0 to 1 | direct |
-| 5 | TCP X | -0.6m to +0.6m | / 0.6 |
-| 6 | TCP Y | 0 to 0.6m | / 0.6 |
-| 7 | TCP Z | -0.6m to +0.6m | / 0.6 |
-| 8 | Dir X | -1 to +1 | direct |
-| 9 | Dir Y | -1 to +1 | direct |
-| 10 | Dir Z | -1 to +1 | direct |
-| 11 | Laser distance | 0 to 1m | / 1.0 |
-| 12 | Is gripping | 0 or 1 | direct |
-| 13 | Target vertical | 0 or 1 | direct |
-| 14 | Target horizontal | 0 or 1 | direct |
+| 0 | Axis 1 angle (Y rotation) | -90° to +90° | / 90 |
+| 1 | Axis 2 angle (X rotation) | -90° to +90° | / 90 |
+| 2 | Axis 3 angle (X rotation) | -90° to +90° | / 90 |
+| 3 | Axis 4 angle (X rotation) | -180° to +180° | / 180 |
+| 4 | Axis 5 angle (Z rotation) | -90° to +90° | / 90 |
+| 5 | Axis 6 state | 0 or 1 | direct (0=vertical, 1=horizontal) |
+| 6 | Gripper state | 0 to 1 | direct |
+| 7 | TCP X | -0.6m to +0.6m | / 0.6 |
+| 8 | TCP Y | 0 to 0.6m | / 0.6 |
+| 9 | TCP Z | -0.6m to +0.6m | / 0.6 |
+| 10 | Dir X | -1 to +1 | direct |
+| 11 | Dir Y | -1 to +1 | direct |
+| 12 | Dir Z | -1 to +1 | direct |
+| 13 | Laser distance | 0 to 1m | / 1.0 |
+| 14 | Is gripping | 0 or 1 | direct |
+| 15 | Target vertical | 0 or 1 | direct |
+| 16 | Target horizontal | 0 or 1 | direct |
 
 ---
 
@@ -177,7 +196,7 @@ observation_space = spaces.Box(
 action_space = spaces.Box(
     low=-1.0,
     high=1.0,
-    shape=(5,),
+    shape=(7,),
     dtype=np.float32
 )
 ```
@@ -186,11 +205,13 @@ action_space = spaces.Box(
 
 | Index | Component | Raw Range | Scaling |
 |-------|-----------|-----------|---------|
-| 0 | Delta Axis 1 | -1 to +1 | × 10° |
-| 1 | Delta Axis 2 | -1 to +1 | × 10° |
-| 2 | Delta Axis 3 | -1 to +1 | × 10° |
-| 3 | Delta Axis 4 | -1 to +1 | × 10° |
-| 4 | Gripper | -1 to +1 | >0.5 = close |
+| 0 | Delta Axis 1 (Y) | -1 to +1 | × 10° |
+| 1 | Delta Axis 2 (X) | -1 to +1 | × 10° |
+| 2 | Delta Axis 3 (X) | -1 to +1 | × 10° |
+| 3 | Delta Axis 4 (X) | -1 to +1 | × 10° |
+| 4 | Delta Axis 5 (Z) | -1 to +1 | × 10° |
+| 5 | Axis 6 orientation | -1 to +1 | <0 = vertical (0°), ≥0 = horizontal (90°) |
+| 6 | Gripper | -1 to +1 | >0.5 = close |
 
 ---
 
