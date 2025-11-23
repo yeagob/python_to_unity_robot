@@ -42,7 +42,9 @@ class UnityRobotEnvironment(gym.Env):
         self._render_mode: Optional[str] = render_mode
         self._current_step_count: int = 0
 
-        self._network_service: NetworkService = NetworkService(server_address)
+        # Parse server address (format: "tcp://host:port")
+        host, port = self._parse_server_address(server_address)
+        self._network_service: NetworkService = NetworkService(host, port)
         self._reward_calculation_service: RewardCalculationService = RewardCalculationService()
 
         # 17-dimensional observation space (normalized to [-1, 1])
@@ -129,6 +131,24 @@ class UnityRobotEnvironment(gym.Env):
             simulation_mode_enabled=enable_smooth_movement
         )
         self._network_service.send_command(configuration_command)
+
+    def _parse_server_address(self, address: str) -> Tuple[str, int]:
+        """Parse server address from 'tcp://host:port' format."""
+        # Remove protocol prefix if present
+        if address.startswith("tcp://"):
+            address = address[6:]
+        elif address.startswith("://"):
+            address = address[3:]
+
+        # Split host and port
+        if ":" in address:
+            host, port_str = address.rsplit(":", 1)
+            port = int(port_str)
+        else:
+            host = address
+            port = NetworkService.DEFAULT_PORT
+
+        return host, port
 
     def _normalize_observation(self, observation: ObservationModel) -> np.ndarray:
         """Normalize observation to [-1, 1] range."""
