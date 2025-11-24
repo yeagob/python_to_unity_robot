@@ -48,15 +48,24 @@ namespace RobotSimulation.Services
 
             for (int jointIndex = 0; jointIndex < jointCount; jointIndex++)
             {
+                ArticulationBody joint = _jointArticulationBodies[jointIndex];
+
+                // Skip joints without 1 DOF (e.g., Fixed joints)
+                if (joint.jointType != ArticulationJointType.RevoluteJoint || joint.dofCount != 1)
+                {
+                    Debug.LogWarning($"RobotService: Skipping joint {jointIndex} - not a single-DOF revolute joint (type: {joint.jointType}, dof: {joint.dofCount})");
+                    continue;
+                }
+
                 float clampedAngle = ClampJointAngle(anglesInDegrees[jointIndex], jointIndex);
 
-                ArticulationDrive articulationDrive = _jointArticulationBodies[jointIndex].xDrive;
+                ArticulationDrive articulationDrive = joint.xDrive;
                 articulationDrive.target = clampedAngle;
-                _jointArticulationBodies[jointIndex].xDrive = articulationDrive;
+                joint.xDrive = articulationDrive;
 
                 ArticulationReducedSpace jointPosition = new ArticulationReducedSpace(
                     clampedAngle * Mathf.Deg2Rad);
-                _jointArticulationBodies[jointIndex].jointPosition = jointPosition;
+                joint.jointPosition = jointPosition;
             }
         }
 
@@ -66,6 +75,12 @@ namespace RobotSimulation.Services
 
             for (int jointIndex = 0; jointIndex < jointCount; jointIndex++)
             {
+                // Skip joints without 1 DOF
+                if (jointIndex < _jointArticulationBodies.Length && _jointArticulationBodies[jointIndex].dofCount != 1)
+                {
+                    continue;
+                }
+
                 _targetJointAngles[jointIndex] = ClampJointAngle(anglesInDegrees[jointIndex], jointIndex);
             }
         }
@@ -76,14 +91,14 @@ namespace RobotSimulation.Services
                 ? _configuration.GripperClosedPositionMeters
                 : _configuration.GripperOpenPositionMeters;
 
-            if (_gripperLeftArticulationBody != null)
+            if (_gripperLeftArticulationBody != null && _gripperLeftArticulationBody.dofCount >= 1)
             {
                 ArticulationDrive leftGripperDrive = _gripperLeftArticulationBody.xDrive;
                 leftGripperDrive.target = targetPosition;
                 _gripperLeftArticulationBody.xDrive = leftGripperDrive;
             }
 
-            if (_gripperRightArticulationBody != null)
+            if (_gripperRightArticulationBody != null && _gripperRightArticulationBody.dofCount >= 1)
             {
                 ArticulationDrive rightGripperDrive = _gripperRightArticulationBody.xDrive;
                 rightGripperDrive.target = targetPosition;
@@ -97,16 +112,24 @@ namespace RobotSimulation.Services
 
             if (_jointArticulationBodies.Length >= 6)
             {
+                ArticulationBody axis6Joint = _jointArticulationBodies[5];
+
+                // Skip if not a 1-DOF revolute joint
+                if (axis6Joint.jointType != ArticulationJointType.RevoluteJoint || axis6Joint.dofCount != 1)
+                {
+                    return;
+                }
+
                 float targetAngle = isHorizontal ? 90.0f : 0.0f;
-                ArticulationDrive axis6Drive = _jointArticulationBodies[5].xDrive;
+                ArticulationDrive axis6Drive = axis6Joint.xDrive;
                 axis6Drive.target = targetAngle;
-                _jointArticulationBodies[5].xDrive = axis6Drive;
+                axis6Joint.xDrive = axis6Drive;
 
                 if (_currentControlMode == RobotControlMode.Training)
                 {
                     ArticulationReducedSpace jointPosition = new ArticulationReducedSpace(
                         targetAngle * Mathf.Deg2Rad);
-                    _jointArticulationBodies[5].jointPosition = jointPosition;
+                    axis6Joint.jointPosition = jointPosition;
                 }
             }
         }
@@ -131,7 +154,16 @@ namespace RobotSimulation.Services
 
             for (int jointIndex = 0; jointIndex < _jointArticulationBodies.Length; jointIndex++)
             {
-                float angleInRadians = _jointArticulationBodies[jointIndex].jointPosition[0];
+                ArticulationBody joint = _jointArticulationBodies[jointIndex];
+
+                // Skip joints without 1 DOF
+                if (joint.dofCount != 1)
+                {
+                    currentAngles[jointIndex] = 0.0f;
+                    continue;
+                }
+
+                float angleInRadians = joint.jointPosition[0];
                 currentAngles[jointIndex] = angleInRadians * Mathf.Rad2Deg;
             }
 
@@ -160,7 +192,15 @@ namespace RobotSimulation.Services
 
             for (int jointIndex = 0; jointIndex < _jointArticulationBodies.Length; jointIndex++)
             {
-                ArticulationDrive articulationDrive = _jointArticulationBodies[jointIndex].xDrive;
+                ArticulationBody joint = _jointArticulationBodies[jointIndex];
+
+                // Skip joints without 1 DOF
+                if (joint.dofCount != 1)
+                {
+                    continue;
+                }
+
+                ArticulationDrive articulationDrive = joint.xDrive;
 
                 float interpolatedTarget = Mathf.MoveTowards(
                     articulationDrive.target,
@@ -171,7 +211,7 @@ namespace RobotSimulation.Services
                 articulationDrive.stiffness = _configuration.ArticulationDriveStiffness;
                 articulationDrive.damping = _configuration.ArticulationDriveDamping;
 
-                _jointArticulationBodies[jointIndex].xDrive = articulationDrive;
+                joint.xDrive = articulationDrive;
             }
         }
 
@@ -184,6 +224,12 @@ namespace RobotSimulation.Services
         {
             foreach (ArticulationBody jointBody in _jointArticulationBodies)
             {
+                // Skip joints without 1 DOF
+                if (jointBody.dofCount != 1)
+                {
+                    continue;
+                }
+
                 ArticulationDrive drive = jointBody.xDrive;
                 drive.stiffness = _configuration.ArticulationDriveStiffness;
                 drive.damping = _configuration.ArticulationDriveDamping;
@@ -194,6 +240,12 @@ namespace RobotSimulation.Services
         private float GetGripperOpenPercentage()
         {
             if (_gripperLeftArticulationBody == null)
+            {
+                return 1.0f;
+            }
+
+            // Check if gripper has valid DOF
+            if (_gripperLeftArticulationBody.dofCount < 1)
             {
                 return 1.0f;
             }

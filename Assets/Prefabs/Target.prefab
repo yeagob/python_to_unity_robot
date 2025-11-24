@@ -13,7 +13,7 @@ GameObject:
   - component: {fileID: 4579018345043760158}
   m_Layer: 17
   m_Name: Target
-  m_TagString: Can
+  m_TagString: Target
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -96,7 +96,7 @@ GameObject:
   - component: {fileID: 3507282714715070844}
   m_Layer: 17
   m_Name: CanRoot
-  m_TagString: Untagged
+  m_TagString: Target
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0

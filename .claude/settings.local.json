@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(python train.py:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(python -m pip install:*)",
+      "Bash(python -m ensurepip:*)",
+      "Bash(python -m venv:*)",
+      "Bash(python\\venv\\Scripts\\pip.exe:*)",
+      "Bash(python/venv/Scripts/pip.exe:*)",
+      "Bash(python/venv/Scripts/python.exe:*)"
     ],
     "deny": [],
     "ask": []

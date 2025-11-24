@@ -8,6 +8,7 @@ TagManager:
   - NoDeselect
   - Align
   - Slice
+  - Target
   layers:
   - Default
   - TransparentFX

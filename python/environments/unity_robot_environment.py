@@ -41,6 +41,7 @@ class UnityRobotEnvironment(gym.Env):
         self._maximum_episode_steps: int = maximum_episode_steps
         self._render_mode: Optional[str] = render_mode
         self._current_step_count: int = 0
+        self._num_joints: Optional[int] = None  # Will be detected on first reset
 
         # Parse server address (format: "tcp://host:port")
         host, port = self._parse_server_address(server_address)
@@ -72,8 +73,9 @@ class UnityRobotEnvironment(gym.Env):
         """Execute one environment step."""
         self._current_step_count += 1
 
-        # Scale joint deltas (first 5 actions) by maximum delta
-        scaled_joint_deltas: np.ndarray = action[:5] * self.MAXIMUM_DELTA_DEGREES
+        # Scale joint deltas (up to 5 actions or number of joints, whichever is less)
+        num_action_joints = min(5, self._num_joints) if self._num_joints else 5
+        scaled_joint_deltas: np.ndarray = action[:num_action_joints] * self.MAXIMUM_DELTA_DEGREES
 
         # Axis 6 orientation: <0 = vertical (0), >=0 = horizontal (1)
         axis_6_orientation: float = 0.0 if action[5] < 0 else 1.0
@@ -152,9 +154,20 @@ class UnityRobotEnvironment(gym.Env):
 
     def _normalize_observation(self, observation: ObservationModel) -> np.ndarray:
         """Normalize observation to [-1, 1] range."""
-        # Normalize joint angles (6 values)
-        joint_angles_array: np.ndarray = np.array(observation.joint_angles[:6])
-        normalized_joint_angles: np.ndarray = joint_angles_array / self.JOINT_ANGLE_LIMITS
+        # Detect number of joints on first call
+        if self._num_joints is None:
+            self._num_joints = len(observation.joint_angles)
+            print(f"Detected {self._num_joints} joints from Unity")
+
+        # Normalize joint angles - use actual number of joints from Unity
+        joint_angles_array: np.ndarray = np.array(observation.joint_angles)
+        joint_limits = self.JOINT_ANGLE_LIMITS[:self._num_joints]
+        normalized_joint_angles: np.ndarray = joint_angles_array / joint_limits
+
+        # Pad with zeros if less than 6 joints to maintain observation dimension
+        if self._num_joints < 6:
+            padding = np.zeros(6 - self._num_joints)
+            normalized_joint_angles = np.concatenate([normalized_joint_angles, padding])
 
         # Gripper state (1 value)
         gripper_state_array: np.ndarray = np.array([observation.gripper_state])

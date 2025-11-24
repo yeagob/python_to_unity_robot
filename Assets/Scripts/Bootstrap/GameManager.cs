@@ -115,16 +115,17 @@ namespace RobotSimulation.Bootstrap
         private void HandleStepCommand(CommandModel command)
         {
             float[] currentJointAngles = _robotService.GetCurrentJointAngles();
-            float[] newJointAngles = new float[6];
+            int numJoints = currentJointAngles.Length;
+            float[] newJointAngles = new float[numJoints];
 
-            int actionCount = Mathf.Min(command.Actions != null ? command.Actions.Length : 0, 5);
+            int actionCount = Mathf.Min(command.Actions != null ? command.Actions.Length : 0, Mathf.Min(5, numJoints));
             for (int jointIndex = 0; jointIndex < actionCount; jointIndex++)
             {
                 newJointAngles[jointIndex] = currentJointAngles[jointIndex] + command.Actions[jointIndex];
             }
 
             // Copy remaining angles unchanged
-            for (int jointIndex = actionCount; jointIndex < 6; jointIndex++)
+            for (int jointIndex = actionCount; jointIndex < numJoints; jointIndex++)
             {
                 newJointAngles[jointIndex] = currentJointAngles[jointIndex];
             }
