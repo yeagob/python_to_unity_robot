@@ -8,8 +8,6 @@
 
 This specification defines the TCP Socket-based communication protocol between Python RL agents and the Unity robot simulation. The protocol uses a simple synchronous TCP connection with JSON payloads, ensuring Python controls the simulation step for deterministic reinforcement learning training.
 
-**Note:** This replaces the previous ZeroMQ/NetMQ implementation due to compatibility issues with Unity (see: https://github.com/zeromq/netmq/issues/631).
-
 ---
 
 ## Requirements
@@ -445,23 +443,23 @@ public sealed class TcpNetworkService : INetworkService
 
 ---
 
-## Migration from ZeroMQ
+## Design Rationale
 
 ### Why TCP Sockets?
 
 1. **No external dependencies** - Uses standard library on both sides
-2. **Unity compatibility** - No NetMQ issues with debugger or context cleanup
+2. **Unity compatibility** - Built-in .NET System.Net.Sockets
 3. **Simpler debugging** - Standard tools work (netcat, wireshark)
-4. **Same semantics** - Still synchronous request-reply pattern
+4. **Deterministic** - Synchronous request-reply pattern ensures lock-step execution
 
-### Changes Required
+### Implementation Details
 
-| Component | ZeroMQ | TCP Sockets |
-|-----------|--------|-------------|
-| Python import | `import zmq` | `import socket` |
-| Unity package | NetMQ NuGet | System.Net.Sockets |
-| Message format | Raw string | Length-prefixed |
-| Field naming | camelCase | PascalCase (JsonUtility) |
+| Component | Implementation |
+|-----------|----------------|
+| Python | `socket` (stdlib) |
+| Unity | `System.Net.Sockets` |
+| Message format | Length-prefixed JSON |
+| Field naming | PascalCase (JsonUtility) |
 
 ---
 

@@ -9,7 +9,7 @@
 
 ## Summary
 
-Implement a complete 4-DOF robotic arm simulation system in Unity 3D with Reinforcement Learning (RL) training capabilities in Python. The system uses ZeroMQ for communication, ArticulationBody for physics-accurate robot simulation, and PPO algorithm for training pick-and-place tasks.
+Implement a complete 4-DOF robotic arm simulation system in Unity 3D with Reinforcement Learning (RL) training capabilities in Python. The system uses TCP sockets for communication, ArticulationBody for physics-accurate robot simulation, and PPO algorithm for training pick-and-place tasks.
 
 ---
 
@@ -39,13 +39,13 @@ The goal is to create an MVP robotic arm simulator that:
 - 4-DOF articulated robot arm using ArticulationBody
 - Laser sensor (Raycast) from TCP
 - Random target spawning in reachable hemisphere
-- ZeroMQ server with JSON protocol
+- TCP server with length-prefixed JSON protocol
 - Training mode (instant teleport) and Simulation mode (smooth interpolation)
 - Collision detection and reporting
 
 **Python (Client)**
 - Gymnasium environment (`UnityRobotEnv`)
-- ZeroMQ client for Unity communication
+- TCP client for Unity communication
 - Observation space: 15 dimensions (normalized)
 - Action space: 5 dimensions (4 joints + gripper)
 - Reward function: $R_{total} = R_{dist} + R_{align} + R_{grasp} + R_{penalty}$
@@ -74,14 +74,14 @@ The goal is to create an MVP robotic arm simulator that:
 | Performance | Optimized for robots | General purpose |
 | Control | Direct drive access | Requires workarounds |
 
-### Why ZeroMQ over TCP Sockets?
+### Why TCP Sockets?
 
-| Aspect | ZeroMQ | Raw TCP |
-|--------|--------|---------|
-| Pattern | Built-in REQ-REP | Manual implementation |
-| Reliability | Message guarantees | Manual handling |
-| Performance | Optimized | Baseline |
-| Complexity | Simple API | More boilerplate |
+| Aspect | TCP Sockets | Alternative |
+|--------|-------------|-------------|
+| Dependencies | None (stdlib) | External libs |
+| Reliability | Built-in guarantees | Varies |
+| Debugging | Standard tools | Library-specific |
+| Complexity | Simple API | Minimal |
 
 ### Why PPO over SAC?
 
@@ -103,9 +103,9 @@ The goal is to create an MVP robotic arm simulator that:
 │                         SYSTEM ARCHITECTURE                      │
 └─────────────────────────────────────────────────────────────────┘
 
-    ┌─────────────┐         ZeroMQ          ┌─────────────┐
+    ┌─────────────┐         TCP             ┌─────────────┐
     │   PYTHON    │◄───────────────────────►│    UNITY    │
-    │             │      REQ-REP/JSON        │             │
+    │             │   Length-Prefixed JSON   │             │
     │ ┌─────────┐ │                          │ ┌─────────┐ │
     │ │Gymnasium│ │   Action (5 floats)      │ │ Article.│ │
     │ │   Env   │─┼────────────────────────►│ │  Body   │ │
@@ -132,7 +132,7 @@ The goal is to create an MVP robotic arm simulator that:
 
 | Specification | Impact |
 |---------------|--------|
-| communication.md | **Major**: Update to ZeroMQ protocol |
+| communication.md | **Major**: TCP socket protocol |
 | robot-interface.md | **Major**: Update to RL action/observation spaces |
 | system.md | **Minor**: Add ArticulationBody requirements |
 | chess-system.md | **None**: Future integration |
@@ -145,7 +145,7 @@ The goal is to create an MVP robotic arm simulator that:
 |------|-------------|--------|------------|
 | Physics instability | Low | High | ArticulationBody is designed for this |
 | Training divergence | Medium | Medium | Curriculum learning, reward shaping |
-| Communication latency | Low | Medium | ZeroMQ is highly optimized |
+| Communication latency | Low | Low | TCP is fast enough for 50Hz |
 | Unity thread safety | Medium | High | ConcurrentQueue for cross-thread |
 | Sim-to-real gap | Medium | High | Realistic physics parameters |
 
@@ -153,7 +153,7 @@ The goal is to create an MVP robotic arm simulator that:
 
 ## Success Criteria
 
-1. **Connection**: Python can connect to Unity via ZeroMQ
+1. **Connection**: Python can connect to Unity via TCP
 2. **Control**: Robot responds to action commands
 3. **Observation**: Unity returns accurate state data
 4. **Training**: PPO agent can learn to touch target
@@ -166,14 +166,12 @@ The goal is to create an MVP robotic arm simulator that:
 
 ### Unity
 - Unity 6 (6000.2.7f2)
-- NetMQ (NuGet package)
-- Newtonsoft.Json (for serialization)
+- System.Net.Sockets (built-in)
 
 ### Python
 ```
 gymnasium>=0.29.0
 stable-baselines3>=2.0.0
-pyzmq>=25.0.0
 numpy>=1.24.0
 customtkinter>=5.0.0
 ```
@@ -185,7 +183,7 @@ customtkinter>=5.0.0
 | Phase | Description | Est. Complexity |
 |-------|-------------|-----------------|
 | 1 | Unity robot skeleton (ArticulationBody) | Medium |
-| 2 | ZMQ Bridge (NetMQ + pyzmq) | Medium |
+| 2 | TCP Bridge (native sockets) | Low |
 | 3 | Gymnasium Environment | Medium |
 | 4 | RL Training Loop | Low |
 | 5 | Control Panel UI | Low |

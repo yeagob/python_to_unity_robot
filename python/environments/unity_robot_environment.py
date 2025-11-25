@@ -116,6 +116,11 @@ class UnityRobotEnvironment(gym.Env):
         reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
         observation_model: ObservationModel = self._network_service.send_command(reset_command)
 
+        # Update joint limits from Unity if provided (on first reset)
+        if observation_model.joint_angle_limits is not None:
+            self.JOINT_ANGLE_LIMITS = np.array(observation_model.joint_angle_limits)
+            print(f"Received joint limits from Unity: {self.JOINT_ANGLE_LIMITS}")
+
         self._reward_calculation_service.reset_state(observation_model)
 
         normalized_observation: np.ndarray = self._normalize_observation(observation_model)

@@ -20,7 +20,8 @@ env/
 *.swo
 
 # Training outputs
-models/
+models/*.zip
+models/*.pkl
 checkpoints/
 tensorboard_logs/
 

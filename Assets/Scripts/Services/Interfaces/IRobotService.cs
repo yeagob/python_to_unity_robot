@@ -17,5 +17,6 @@ namespace RobotSimulation.Services.Interfaces
         void ResetToHomePosition();
         void UpdatePhysicsStep();
         void SetControlMode(RobotControlMode controlMode);
+        float[] GetJointAngleLimits();
     }
 }

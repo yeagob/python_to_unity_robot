@@ -11,8 +11,8 @@ This document provides instructions for implementing the Python-Unity robot arm 
 │     PYTHON          │                    │      UNITY 3D       │
 │  (RL Agent/Brain)   │                    │   (Physics Engine)  │
 ├─────────────────────┤                    ├─────────────────────┤
-│  Gymnasium Env      │◄──── ZeroMQ ─────►│  ArticulationBody   │
-│  PPO Agent          │    REQ-REP/JSON    │  6-DOF Robot        │
+│  Gymnasium Env      │◄──── TCP ────────►│  ArticulationBody   │
+│  PPO Agent          │   Length-Prefixed  │  6-DOF Robot        │
 │  Control Panel UI   │     Port 5555      │  Laser Sensor       │
 └─────────────────────┘                    └─────────────────────┘
 ```
@@ -21,12 +21,10 @@ This document provides instructions for implementing the Python-Unity robot arm 
 
 ## Part 1: Unity Setup
 
-### Step 1: Install Required Packages
+### Step 1: Verify Unity Version
 
-1. Open **Window > Package Manager**
-2. Install NetMQ via NuGet or download from: https://github.com/zeromq/netmq
-   - Download `NetMQ.dll` and `AsyncIO.dll`
-   - Place in `Assets/Plugins/`
+1. Ensure you are using **Unity 6 (6000.2.7f2)** or compatible version
+2. No external packages are required - the project uses built-in .NET TCP sockets
 
 ### Step 2: Create Robot Hierarchy
 
@@ -83,19 +81,9 @@ For each joint:
 3. Set tag to "Target"
 4. Save as prefab in `Assets/Prefabs/`
 
-### Step 6: Enable NetMQ in ZeroMQNetworkService
+### Step 6: Verify Network Service
 
-Open `Assets/Scripts/Services/ZeroMQNetworkService.cs` and uncomment the NetMQ code:
-
-```csharp
-// Uncomment this code after installing NetMQ
-AsyncIO.ForceDotNet.Force();
-
-using (var responseSocket = new NetMQ.Sockets.ResponseSocket())
-{
-    // ... rest of the code
-}
-```
+The project uses `TcpNetworkService.cs` which is automatically initialized by `GameManager`. No additional configuration is needed - the TCP server will start on port 5555 when you press Play in Unity.
 
 ---
 
@@ -111,10 +99,10 @@ pip install -r requirements.txt
 Required packages:
 - gymnasium>=0.29.0
 - stable-baselines3>=2.0.0
-- pyzmq>=25.0.0
 - numpy>=1.24.0
 - customtkinter>=5.0.0
 - tensorboard>=2.14.0
+- pytest>=7.0.0
 
 ### Step 2: Run Tests
 
@@ -216,10 +204,10 @@ $$R_{total} = R_{dist} + R_{align} + R_{grasp} + R_{penalty}$$
 
 ## Troubleshooting
 
-### Unity: "NetMQ not found"
-- Download NetMQ NuGet package
-- Extract DLLs to `Assets/Plugins/`
-- Restart Unity
+### Unity: "TcpNetworkService not found"
+- Ensure `TcpNetworkService.cs` exists in `Assets/Scripts/Services/`
+- Verify `GameManager.cs` is properly configured in the scene
+- Check Unity console for compilation errors
 
 ### Python: "Connection timeout"
 - Ensure Unity is running with Play mode active
@@ -274,7 +262,7 @@ python_to_unity_robot/
 ## Next Steps
 
 1. Create robot prefab in Unity with ArticulationBody hierarchy
-2. Install NetMQ package and enable ZeroMQ code
+2. Verify `TcpNetworkService` is configured in `GameManager`
 3. Test connection with `python test_connection.py`
 4. Run training with `python train.py`
 5. Monitor with TensorBoard: `tensorboard --logdir=./tensorboard_logs/`

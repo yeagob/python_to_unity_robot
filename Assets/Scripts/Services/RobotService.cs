@@ -277,5 +277,10 @@ namespace RobotSimulation.Services
             float limit = JOINT_ANGLE_LIMITS[jointIndex];
             return Mathf.Clamp(angle, -limit, limit);
         }
+
+        public float[] GetJointAngleLimits()
+        {
+            return (float[])JOINT_ANGLE_LIMITS.Clone();
+        }
     }
 }

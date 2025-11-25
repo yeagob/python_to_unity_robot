@@ -94,10 +94,10 @@ class TestCommandModel:
 
         result: dict = command.to_dictionary()
 
-        assert result["type"] == "STEP"
-        assert result["actions"] == [1.0, 2.0, 3.0, 4.0, 5.0]
-        assert result["gripperClose"] == 0.8
-        assert result["axis6Orientation"] == 1.0
+        assert result["Type"] == "STEP"
+        assert result["Actions"] == [1.0, 2.0, 3.0, 4.0, 5.0]
+        assert result["GripperCloseValue"] == 0.8
+        assert result["Axis6Orientation"] == 1.0
 
     def test_reset_command_to_dictionary(self) -> None:
         """Test RESET command serialization."""
@@ -105,9 +105,9 @@ class TestCommandModel:
 
         result: dict = command.to_dictionary()
 
-        assert result["type"] == "RESET"
-        assert "actions" not in result
-        assert "gripperClose" not in result
+        assert result["Type"] == "RESET"
+        assert "Actions" not in result
+        assert "GripperCloseValue" not in result
 
     def test_config_command_to_dictionary(self) -> None:
         """Test CONFIG command serialization."""
@@ -118,8 +118,8 @@ class TestCommandModel:
 
         result: dict = command.to_dictionary()
 
-        assert result["type"] == "CONFIG"
-        assert result["simulationMode"] is True
+        assert result["Type"] == "CONFIG"
+        assert result["SimulationModeEnabled"] is True
 
 
 class TestRewardComponents:

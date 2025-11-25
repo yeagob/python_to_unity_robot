@@ -204,7 +204,8 @@ namespace RobotSimulation.Bootstrap
                 LaserSensorDistance = _sensorService.DetectedDistance,
                 CollisionDetected = _robotController.CollisionDetectedThisFrame,
                 TargetOrientationOneHot = BuildTargetOrientationOneHot(),
-                IsResetFrame = isResetFrame
+                IsResetFrame = isResetFrame,
+                JointAngleLimits = isResetFrame ? _robotService.GetJointAngleLimits() : null
             };
 
             return observation;

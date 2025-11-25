@@ -17,6 +17,7 @@ class ObservationModel:
     collision_detected: bool
     target_orientation_one_hot: List[float]
     is_reset_frame: bool
+    joint_angle_limits: List[float] = None  # Sent by Unity on reset frames
 
     @classmethod
     def from_dictionary(cls, data: dict) -> "ObservationModel":
@@ -32,7 +33,8 @@ class ObservationModel:
             laser_sensor_distance=data.get("LaserSensorDistance", 1.0),
             collision_detected=data.get("CollisionDetected", False),
             target_orientation_one_hot=data.get("TargetOrientationOneHot", [1.0, 0.0]),
-            is_reset_frame=data.get("IsResetFrame", False)
+            is_reset_frame=data.get("IsResetFrame", False),
+            joint_angle_limits=data.get("JointAngleLimits")
         )
 
     def to_dictionary(self) -> dict:

@@ -16,6 +16,7 @@ namespace RobotSimulation.Models
         public bool CollisionDetected;
         public float[] TargetOrientationOneHot;
         public bool IsResetFrame;
+        public float[] JointAngleLimits;  // Send joint limits to Python (only on reset)
 
         public ObservationModel()
         {
@@ -23,6 +24,7 @@ namespace RobotSimulation.Models
             ToolCenterPointPosition = new float[3];
             DirectionToTarget = new float[3];
             TargetOrientationOneHot = new float[2];
+            JointAngleLimits = null;  // Only populated on reset frames
         }
 
         public string ToJson()
