@@ -42,6 +42,16 @@ class UnityRobotEnvironment(gym.Env):
         self._render_mode: Optional[str] = render_mode
         self._current_step_count: int = 0
         self._num_joints: Optional[int] = None  # Will be detected on first reset
+        
+        # Logging stats
+        self._episode_count: int = 0
+        self._log_frequency: int = 50
+        self._stats: Dict[str, int] = {
+            "success": 0,
+            "collision": 0,
+            "underground": 0,
+            "timeout": 0
+        }
 
         # Parse server address (format: "tcp://host:port")
         host, port = self._parse_server_address(server_address)
@@ -97,10 +107,32 @@ class UnityRobotEnvironment(gym.Env):
 
         truncated: bool = self._current_step_count >= self._maximum_episode_steps
 
-        # Log reset reason for debugging
+        # Update stats and log summary
         if terminated or truncated:
-            reset_reason = self._determine_reset_reason(information, truncated)
-            print(f"🔄 Episode Reset - Reason: {reset_reason} (Step {self._current_step_count}/{self._maximum_episode_steps})")
+            self._episode_count += 1
+            
+            if information.get("success", False):
+                self._stats["success"] += 1
+                # Keep immediate log for success
+                print(f"✅ Episode {self._episode_count}: SUCCESS! (Step {self._current_step_count})")
+            elif information.get("collision", False):
+                self._stats["collision"] += 1
+            elif information.get("underground", False):
+                self._stats["underground"] += 1
+            elif truncated:
+                self._stats["timeout"] += 1
+
+            # Print summary every N episodes
+            if self._episode_count % self._log_frequency == 0:
+                print(f"\n📊 Stats (Last {self._log_frequency} Episodes):")
+                print(f"   ✅ Success: {self._stats['success']}")
+                print(f"   💥 Collisions: {self._stats['collision']}")
+                print(f"   ⚠️ Underground: {self._stats['underground']}")
+                print(f"   ⏱️ Timeouts: {self._stats['timeout']}")
+                print(f"   Total Episodes: {self._episode_count}\n")
+                
+                # Reset stats for next cycle
+                self._stats = {k: 0 for k in self._stats}
 
         return normalized_observation, reward, terminated, truncated, information
 
