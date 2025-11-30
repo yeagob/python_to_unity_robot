@@ -14,9 +14,9 @@ class RewardCalculationService:
     DISTANCE_REWARD_SCALE: float = 10.0
     ALIGNMENT_REWARD_SCALE: float = 0.5
     GRASP_SUCCESS_REWARD: float = 100.0
-    COLLISION_PENALTY_VALUE: float = -100.0
-    UNDERGROUND_PENALTY_VALUE: float = -100.0
-    GRASP_DISTANCE_THRESHOLD: float = 0.05
+    COLLISION_PENALTY_VALUE: float = -300.0
+    UNDERGROUND_PENALTY_VALUE: float = -300.0
+    GRASP_DISTANCE_THRESHOLD: float = 0.3
     VELOCITY_MINIMUM_THRESHOLD: float = 1e-6
 
     def __init__(self) -> None:
@@ -107,14 +107,17 @@ class RewardCalculationService:
         return alignment_dot_product * self.ALIGNMENT_REWARD_SCALE
 
     def _calculate_grasp_reward(self, observation: ObservationModel) -> float:
-        """Calculate reward for successful grasp."""
-        is_close_to_target: bool = observation.laser_sensor_distance < self.GRASP_DISTANCE_THRESHOLD
-        is_gripping: bool = observation.is_gripping_object
+        """Calculate reward for successful grasp (or reach)."""
+        # Relaxed condition: Success if distance < 0.3 (30cm), gripping not required for now
+        is_close_to_target: bool = observation.distance_to_target < self.GRASP_DISTANCE_THRESHOLD
+        
+        # Note: We removed 'is_gripping' requirement to facilitate initial learning
+        # is_gripping: bool = observation.is_gripping_object
 
-        if is_close_to_target and is_gripping:
+        if is_close_to_target:
             # Log success with joint angles
             joint_angles_str = ", ".join([f"{angle:.2f}°" for angle in observation.joint_angles])
-            print(f"\n🎯 SUCCESS! Target Position Reached!")
+            print(f"\n🎯 SUCCESS! Target Position Reached (Distance < {self.GRASP_DISTANCE_THRESHOLD}m)!")
             print(f"   Joint Angles: [{joint_angles_str}]")
             print(f"   TCP Position: [{observation.tool_center_point_position[0]:.3f}, "
                   f"{observation.tool_center_point_position[1]:.3f}, "

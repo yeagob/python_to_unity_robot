@@ -20,11 +20,11 @@ class TrainingController:
     LEARNING_RATE: float = 3e-4
     STEPS_PER_UPDATE: int = 2048
     BATCH_SIZE: int = 64
-    TRAINING_EPOCHS: int = 10
+    TRAINING_EPOCHS: int = 7
     DISCOUNT_FACTOR: float = 0.99
     GAE_LAMBDA: float = 0.95
     CLIP_RANGE: float = 0.2
-    ENTROPY_COEFFICIENT: float = 0.01
+    ENTROPY_COEFFICIENT: float = 0.001
     CHECKPOINT_FREQUENCY: int = 10000
 
     def __init__(

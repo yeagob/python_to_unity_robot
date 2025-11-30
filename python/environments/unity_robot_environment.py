@@ -73,14 +73,10 @@ class UnityRobotEnvironment(gym.Env):
         """Execute one environment step."""
         self._current_step_count += 1
 
-        # Scale joint deltas (up to 5 actions or number of joints, whichever is less)
         num_action_joints = min(5, self._num_joints) if self._num_joints else 5
         scaled_joint_deltas: np.ndarray = action[:num_action_joints] * self.MAXIMUM_DELTA_DEGREES
 
-        # Axis 6 orientation: <0 = vertical (0), >=0 = horizontal (1)
         axis_6_orientation: float = 0.0 if action[5] < 0 else 1.0
-
-        # Gripper action
         gripper_action_value: float = float(action[6])
 
         step_command: CommandModel = CommandModel(
@@ -101,6 +97,11 @@ class UnityRobotEnvironment(gym.Env):
 
         truncated: bool = self._current_step_count >= self._maximum_episode_steps
 
+        # Log reset reason for debugging
+        if terminated or truncated:
+            reset_reason = self._determine_reset_reason(information, truncated)
+            print(f"🔄 Episode Reset - Reason: {reset_reason} (Step {self._current_step_count}/{self._maximum_episode_steps})")
+
         return normalized_observation, reward, terminated, truncated, information
 
     def reset(
@@ -116,10 +117,8 @@ class UnityRobotEnvironment(gym.Env):
         reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
         observation_model: ObservationModel = self._network_service.send_command(reset_command)
 
-        # Update joint limits from Unity if provided (on first reset)
         if observation_model.joint_angle_limits is not None:
             self.JOINT_ANGLE_LIMITS = np.array(observation_model.joint_angle_limits)
-            print(f"Received joint limits from Unity: {self.JOINT_ANGLE_LIMITS}")
 
         self._reward_calculation_service.reset_state(observation_model)
 
@@ -141,13 +140,11 @@ class UnityRobotEnvironment(gym.Env):
 
     def _parse_server_address(self, address: str) -> Tuple[str, int]:
         """Parse server address from 'tcp://host:port' format."""
-        # Remove protocol prefix if present
         if address.startswith("tcp://"):
             address = address[6:]
         elif address.startswith("://"):
             address = address[3:]
 
-        # Split host and port
         if ":" in address:
             host, port_str = address.rsplit(":", 1)
             port = int(port_str)
@@ -159,54 +156,44 @@ class UnityRobotEnvironment(gym.Env):
 
     def _normalize_observation(self, observation: ObservationModel) -> np.ndarray:
         """Normalize observation to [-1, 1] range."""
-        # Detect number of joints on first call
         if self._num_joints is None:
             self._num_joints = len(observation.joint_angles)
             print(f"Detected {self._num_joints} joints from Unity")
 
-        # Normalize joint angles - use actual number of joints from Unity
         joint_angles_array: np.ndarray = np.array(observation.joint_angles)
         joint_limits = self.JOINT_ANGLE_LIMITS[:self._num_joints]
         normalized_joint_angles: np.ndarray = joint_angles_array / joint_limits
 
-        # Pad with zeros if less than 6 joints to maintain observation dimension
         if self._num_joints < 6:
             padding = np.zeros(6 - self._num_joints)
             normalized_joint_angles = np.concatenate([normalized_joint_angles, padding])
 
-        # Gripper state (1 value)
         gripper_state_array: np.ndarray = np.array([observation.gripper_state])
 
-        # Normalize TCP position (3 values)
         normalized_tool_position: np.ndarray = (
             np.array(observation.tool_center_point_position) / self.WORKSPACE_RADIUS_METERS
         )
 
-        # Direction to target (3 values, already normalized)
         direction_to_target: np.ndarray = np.array(observation.direction_to_target)
 
-        # Normalize laser distance (1 value)
         normalized_laser_distance: np.ndarray = np.array([
             observation.laser_sensor_distance / self.LASER_MAXIMUM_RANGE_METERS
         ])
 
-        # Is gripping flag (1 value)
         is_gripping_array: np.ndarray = np.array([
             1.0 if observation.is_gripping_object else 0.0
         ])
 
-        # Target orientation one-hot (2 values)
         target_orientation: np.ndarray = np.array(observation.target_orientation_one_hot)
 
-        # Concatenate all components: 6 + 1 + 3 + 3 + 1 + 1 + 2 = 17
         concatenated_observation: np.ndarray = np.concatenate([
-            normalized_joint_angles,      # 0-5: joint angles
-            gripper_state_array,          # 6: gripper state
-            normalized_tool_position,     # 7-9: TCP position
-            direction_to_target,          # 10-12: direction to target
-            normalized_laser_distance,    # 13: laser distance
-            is_gripping_array,            # 14: is gripping
-            target_orientation            # 15-16: target orientation
+            normalized_joint_angles,
+            gripper_state_array,
+            normalized_tool_position,
+            direction_to_target,
+            normalized_laser_distance,
+            is_gripping_array,
+            target_orientation
         ])
 
         clipped_observation: np.ndarray = np.clip(
@@ -214,3 +201,16 @@ class UnityRobotEnvironment(gym.Env):
         ).astype(np.float32)
 
         return clipped_observation
+
+    def _determine_reset_reason(self, info: Dict[str, Any], truncated: bool) -> str:
+        """Determine the reason for episode reset based on info dictionary."""
+        if info.get("success", False):
+            return "✅ SUCCESS - Target reached"
+        elif info.get("collision", False):
+            return "💥 COLLISION - Hit environment"
+        elif info.get("underground", False):
+            return "⚠️ UNDERGROUND - TCP below base"
+        elif truncated:
+            return "⏱️ TIMEOUT - Max steps reached"
+        else:
+            return "❓ UNKNOWN"
