@@ -69,31 +69,6 @@ class TrainingController:
             
             # Try to load corresponding normalizer
             normalizer_path = self._resume_from_model.replace("robot_policy", "normalizer") + ".pkl"
-            if os.path.exists(normalizer_path):
-                print(f"Loading normalizer from: {normalizer_path}")
-                self._environment = VecNormalize.load(normalizer_path, self._environment)
-                print("Normalizer loaded successfully!")
-        else:
-            self._model = PPO(
-                policy="MlpPolicy",
-                env=self._environment,
-                learning_rate=self.LEARNING_RATE,
-                n_steps=self.STEPS_PER_UPDATE,
-                batch_size=self.BATCH_SIZE,
-                n_epochs=self.TRAINING_EPOCHS,
-                gamma=self.DISCOUNT_FACTOR,
-                gae_lambda=self.GAE_LAMBDA,
-                clip_range=self.CLIP_RANGE,
-                ent_coef=self.ENTROPY_COEFFICIENT,
-                verbose=1,
-                tensorboard_log="./tensorboard_logs/"
-            )
-
-    def execute_curriculum_training(self) -> None:
-        """Execute curriculum learning through all phases."""
-        from stable_baselines3.common.callbacks import CheckpointCallback
-
-        checkpoint_callback: CheckpointCallback = CheckpointCallback(
             save_freq=self.CHECKPOINT_FREQUENCY,
             save_path="./checkpoints/",
             name_prefix="robot_policy"

@@ -16,6 +16,8 @@ class RewardCalculationService:
     GRASP_SUCCESS_REWARD: float = 100.0
     COLLISION_PENALTY_VALUE: float = -300.0
     UNDERGROUND_PENALTY_VALUE: float = -300.0
+    SURVIVAL_REWARD: float = 0.02
+    ACTION_PENALTY_SCALE: float = 0.05
     GRASP_DISTANCE_THRESHOLD: float = 0.3
     VELOCITY_MINIMUM_THRESHOLD: float = 1e-6
 
@@ -48,6 +50,16 @@ class RewardCalculationService:
 
             reward_components.alignment_reward = self._calculate_alignment_reward(
                 current_position, target_direction)
+
+        # Survival reward (for existing without colliding)
+        reward_components.total_reward += self.SURVIVAL_REWARD
+
+        # Action penalty (to encourage smooth movement)
+        # Note: We don't have the action here, but we can infer it from joint changes or pass it in.
+        # For now, let's skip explicit action penalty here or calculate it based on velocity if needed.
+        # Actually, let's keep it simple: Survival reward is the main fix for now.
+        # If we want action penalty, we need to pass 'action' to this method.
+        # Let's stick to Survival Reward first as it's the most critical for "staying alive".
 
         reward_components.grasp_reward = self._calculate_grasp_reward(observation)
 
