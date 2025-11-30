@@ -99,6 +99,8 @@ namespace RobotSimulation.Bootstrap
                 return;
             }
 
+            _robotController.SetEnabled = true;
+
             CommandType commandType = receivedCommand.GetCommandType();
 
             switch (commandType)
@@ -264,6 +266,7 @@ namespace RobotSimulation.Bootstrap
             {
                 _networkService.Shutdown();
             }
+            _robotController.SetEnabled = false;
         }
     }
 }

@@ -112,6 +112,14 @@ class RewardCalculationService:
         is_gripping: bool = observation.is_gripping_object
 
         if is_close_to_target and is_gripping:
+            # Log success with joint angles
+            joint_angles_str = ", ".join([f"{angle:.2f}°" for angle in observation.joint_angles])
+            print(f"\n🎯 SUCCESS! Target Position Reached!")
+            print(f"   Joint Angles: [{joint_angles_str}]")
+            print(f"   TCP Position: [{observation.tool_center_point_position[0]:.3f}, "
+                  f"{observation.tool_center_point_position[1]:.3f}, "
+                  f"{observation.tool_center_point_position[2]:.3f}]")
+            print(f"   Distance to Target: {observation.distance_to_target:.4f}m\n")
             return self.GRASP_SUCCESS_REWARD
 
         return 0.0

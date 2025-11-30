@@ -24,12 +24,22 @@ namespace RobotSimulation.Controllers
 
         public CollisionType LastCollisionType => _lastCollisionType;
 
+        public bool SetEnabled
+		{
+			set
+			{
+                //Avoid crazy movements
+                _rootArticulationBody.enabled = value;
+            }
+		}
+
         public void InitializeController(IRobotService robotService)
         {
             _robotService = robotService;
             _collisionDetectedThisFrame = false;
             _lastCollisionType = CollisionType.None;
 
+            SetEnabled = false;
 
             ConfigureSelfCollisionIgnoring();
         }
@@ -38,6 +48,7 @@ namespace RobotSimulation.Controllers
         {
             if (_robotService != null)
             {
+                _jointArticulationBodies[0].enabled = true;
                 _robotService.UpdatePhysicsStep();
             }
         }
