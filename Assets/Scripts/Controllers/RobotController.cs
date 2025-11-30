@@ -72,11 +72,14 @@ namespace RobotSimulation.Controllers
             string collidedObjectTag = collisionInfo.gameObject.tag;
             CollisionType detectedCollisionType = DetermineCollisionType(collidedObjectTag);
 
+            // Always raise the event for logging/debugging
+            CollisionEvents.RaiseCollisionDetected(detectedCollisionType, collidedObjectTag);
+
+            // Only set the flag for Environment collisions (penalties)
             if (detectedCollisionType == CollisionType.Environment)
             {
                 _collisionDetectedThisFrame = true;
                 _lastCollisionType = detectedCollisionType;
-                CollisionEvents.RaiseCollisionDetected(detectedCollisionType, collidedObjectTag);
             }
         }
 

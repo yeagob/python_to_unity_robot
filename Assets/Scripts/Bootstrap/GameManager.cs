@@ -78,6 +78,9 @@ namespace RobotSimulation.Bootstrap
 
             _networkService = new TcpNetworkService();
             _networkService.Initialize(_configuration.NetworkPortNumber);
+
+            // Fix for erratic movement: Force robot to home position on startup
+            _robotService.ResetToHomePosition();
         }
 
         private void InitializeControllers()
@@ -153,6 +156,7 @@ namespace RobotSimulation.Bootstrap
 
         private void HandleResetCommand()
         {
+            Debug.Log("GameManager: Target reset requested by Python (Episode End or Timeout).");
             _robotService.ResetToHomePosition();
             _robotController.ResetCollisionState();
             _targetService.SpawnNewRandomTarget();
@@ -244,7 +248,14 @@ namespace RobotSimulation.Bootstrap
 
         private void HandleCollisionDetected(CollisionType collisionType, string objectTag)
         {
-            Debug.Log($"GameManager: Collision detected - {collisionType} with {objectTag}");
+            if (collisionType == CollisionType.Target)
+            {
+                Debug.Log("GameManager: TARGET REACHED! 🎯 Robot touched the target.");
+            }
+            else
+            {
+                Debug.Log($"GameManager: Collision detected - {collisionType} with {objectTag}");
+            }
         }
 
         private void ShutdownServices()

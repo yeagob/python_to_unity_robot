@@ -10,10 +10,10 @@ namespace RobotSimulation.Services
         private GameObject _currentTargetInstance;
         private bool _isCurrentTargetVertical;
 
-        private const float MINIMUM_SPAWN_RADIUS = 0.2f;
-        private const float MAXIMUM_SPAWN_RADIUS = 0.5f;
+        private const float MINIMUM_SPAWN_RADIUS = 0.5f;
+        private const float MAXIMUM_SPAWN_RADIUS = 2.5f;
         private const float MINIMUM_SPAWN_HEIGHT = 0.1f;
-        private const float MAXIMUM_SPAWN_HEIGHT = 0.4f;
+        private const float MAXIMUM_SPAWN_HEIGHT = 2f;
         private const string TARGET_TAG = "Target";
 
         public Transform CurrentTargetTransform
