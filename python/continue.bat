@@ -1,0 +1,1 @@
+python train.py --resume --model-path ./models/robot_policy_touch

@@ -30,6 +30,7 @@ namespace RobotSimulation.Controllers
             _collisionDetectedThisFrame = false;
             _lastCollisionType = CollisionType.None;
 
+
             ConfigureSelfCollisionIgnoring();
         }
 

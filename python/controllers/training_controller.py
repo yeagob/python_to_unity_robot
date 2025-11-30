@@ -27,8 +27,13 @@ class TrainingController:
     ENTROPY_COEFFICIENT: float = 0.01
     CHECKPOINT_FREQUENCY: int = 10000
 
-    def __init__(self, server_address: str = "tcp://localhost:5555") -> None:
+    def __init__(
+        self,
+        server_address: str = "tcp://localhost:5555",
+        resume_from_model: Optional[str] = None
+    ) -> None:
         self._server_address: str = server_address
+        self._resume_from_model: Optional[str] = resume_from_model
         self._environment = None
         self._model = None
         self._curriculum_phases: List[CurriculumPhase] = self._create_curriculum_phases()
@@ -52,20 +57,37 @@ class TrainingController:
         os.makedirs("./checkpoints", exist_ok=True)
         os.makedirs("./tensorboard_logs", exist_ok=True)
 
-        self._model = PPO(
-            policy="MlpPolicy",
-            env=self._environment,
-            learning_rate=self.LEARNING_RATE,
-            n_steps=self.STEPS_PER_UPDATE,
-            batch_size=self.BATCH_SIZE,
-            n_epochs=self.TRAINING_EPOCHS,
-            gamma=self.DISCOUNT_FACTOR,
-            gae_lambda=self.GAE_LAMBDA,
-            clip_range=self.CLIP_RANGE,
-            ent_coef=self.ENTROPY_COEFFICIENT,
-            verbose=1,
-            tensorboard_log="./tensorboard_logs/"
-        )
+        # Load existing model or create new one
+        if self._resume_from_model is not None:
+            print(f"Loading model from: {self._resume_from_model}")
+            self._model = PPO.load(
+                self._resume_from_model,
+                env=self._environment,
+                tensorboard_log="./tensorboard_logs/"
+            )
+            print("Model loaded successfully!")
+            
+            # Try to load corresponding normalizer
+            normalizer_path = self._resume_from_model.replace("robot_policy", "normalizer") + ".pkl"
+            if os.path.exists(normalizer_path):
+                print(f"Loading normalizer from: {normalizer_path}")
+                self._environment = VecNormalize.load(normalizer_path, self._environment)
+                print("Normalizer loaded successfully!")
+        else:
+            self._model = PPO(
+                policy="MlpPolicy",
+                env=self._environment,
+                learning_rate=self.LEARNING_RATE,
+                n_steps=self.STEPS_PER_UPDATE,
+                batch_size=self.BATCH_SIZE,
+                n_epochs=self.TRAINING_EPOCHS,
+                gamma=self.DISCOUNT_FACTOR,
+                gae_lambda=self.GAE_LAMBDA,
+                clip_range=self.CLIP_RANGE,
+                ent_coef=self.ENTROPY_COEFFICIENT,
+                verbose=1,
+                tensorboard_log="./tensorboard_logs/"
+            )
 
     def execute_curriculum_training(self) -> None:
         """Execute curriculum learning through all phases."""

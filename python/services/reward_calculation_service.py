@@ -15,6 +15,7 @@ class RewardCalculationService:
     ALIGNMENT_REWARD_SCALE: float = 0.5
     GRASP_SUCCESS_REWARD: float = 100.0
     COLLISION_PENALTY_VALUE: float = -100.0
+    UNDERGROUND_PENALTY_VALUE: float = -100.0
     GRASP_DISTANCE_THRESHOLD: float = 0.05
     VELOCITY_MINIMUM_THRESHOLD: float = 1e-6
 
@@ -53,12 +54,22 @@ class RewardCalculationService:
         if reward_components.grasp_reward > 0.0:
             information_dictionary["success"] = True
 
+        # Check for collision
         collision_result: Tuple[float, bool] = self._calculate_collision_penalty(observation)
         reward_components.collision_penalty = collision_result[0]
 
         if collision_result[1]:
             episode_terminated = True
             information_dictionary["collision"] = True
+
+        # Check for underground (TCP below base)
+        underground_result: Tuple[float, bool] = self._calculate_underground_penalty(
+            current_position)
+        reward_components.collision_penalty += underground_result[0]
+
+        if underground_result[1]:
+            episode_terminated = True
+            information_dictionary["underground"] = True
 
         self._update_previous_state(current_distance, current_position)
 
@@ -113,6 +124,18 @@ class RewardCalculationService:
         if observation.collision_detected:
             return self.COLLISION_PENALTY_VALUE, True
 
+        return 0.0, False
+
+    def _calculate_underground_penalty(
+        self,
+        current_position: np.ndarray
+    ) -> Tuple[float, bool]:
+        """Calculate penalty for TCP going below the base (Y < 0)."""
+        tcp_y_position: float = current_position[1]
+        
+        if tcp_y_position < 0.0:
+            return self.UNDERGROUND_PENALTY_VALUE, True
+        
         return 0.0, False
 
     def _update_previous_state(
