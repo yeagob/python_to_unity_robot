@@ -17,7 +17,7 @@ namespace RobotSimulation.Services
         private float[] _targetJointAngles;
         private bool _axis6IsHorizontal;
 
-        private static readonly float[] JOINT_ANGLE_LIMITS = new float[] { 90.0f, 90.0f, 90.0f, 180.0f, 90.0f, 90.0f };
+        private static readonly float[] JOINT_ANGLE_LIMITS = new float[] { 180.0f, 90.0f, 90.0f, 180.0f, 90.0f, 90.0f };
 
         public RobotControlMode CurrentControlMode => _currentControlMode;
 

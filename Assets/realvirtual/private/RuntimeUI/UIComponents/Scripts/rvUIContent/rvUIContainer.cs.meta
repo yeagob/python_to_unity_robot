@@ -1,9 +1,0 @@
-fileFormatVersion: 2
-guid: 6537bf67341433347b8130ccd48bdd7d
-AssetOrigin:
-  serializedVersion: 1
-  productId: 303030
-  packageName: realvirtual.io Digital Twin Starter 6
-  packageVersion: 6.0.8.8275
-  assetPath: Assets/realvirtual/private/RuntimeUI/UIComponents/Scripts/rvUIContent/rvUIContainer.cs
-  uploadId: 820840
