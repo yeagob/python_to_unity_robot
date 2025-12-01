@@ -24,24 +24,14 @@ namespace RobotSimulation.Controllers
 
         public CollisionType LastCollisionType => _lastCollisionType;
 
-        public bool SetEnabled
-		{
-			set
-			{
-                //Avoid crazy movements
-                _rootArticulationBody.enabled = value;
-            }
-		}
-
         public void InitializeController(IRobotService robotService)
         {
             _robotService = robotService;
             _collisionDetectedThisFrame = false;
             _lastCollisionType = CollisionType.None;
 
-            SetEnabled = false;
-
-            ConfigureSelfCollisionIgnoring();
+            // Attach collision detectors to all joints
+            AttachCollisionDetectorsToJoints();
         }
 
         public void PerformFixedUpdate()
@@ -57,6 +47,18 @@ namespace RobotSimulation.Controllers
         {
             _collisionDetectedThisFrame = false;
             _lastCollisionType = CollisionType.None;
+        }
+
+        public void RegisterSelfCollision()
+        {
+            _collisionDetectedThisFrame = true;
+            _lastCollisionType = CollisionType.Environment;
+        }
+
+        public void RegisterEnvironmentCollision()
+        {
+            _collisionDetectedThisFrame = true;
+            _lastCollisionType = CollisionType.Environment;
         }
 
         public ArticulationBody[] GetJointArticulationBodies()
@@ -105,17 +107,39 @@ namespace RobotSimulation.Controllers
             return CollisionType.Environment;
         }
 
-        private void ConfigureSelfCollisionIgnoring()
+        private void AttachCollisionDetectorsToJoints()
         {
-            Collider[] allColliders = GetComponentsInChildren<Collider>();
-
-            for (int firstIndex = 0; firstIndex < allColliders.Length; firstIndex++)
+            // Attach collision detector to root
+            if (_rootArticulationBody != null)
             {
-                for (int secondIndex = firstIndex + 1; secondIndex < allColliders.Length; secondIndex++)
+                JointCollisionDetector detector = _rootArticulationBody.gameObject.AddComponent<JointCollisionDetector>();
+                detector.Initialize(this);
+            }
+
+            // Attach collision detectors to all joints
+            foreach (ArticulationBody joint in _jointArticulationBodies)
+            {
+                if (joint != null)
                 {
-                    Physics.IgnoreCollision(allColliders[firstIndex], allColliders[secondIndex], true);
+                    JointCollisionDetector detector = joint.gameObject.AddComponent<JointCollisionDetector>();
+                    detector.Initialize(this);
                 }
             }
+
+            // Attach to grippers
+            if (_gripperLeftArticulationBody != null)
+            {
+                JointCollisionDetector detector = _gripperLeftArticulationBody.gameObject.AddComponent<JointCollisionDetector>();
+                detector.Initialize(this);
+            }
+
+            if (_gripperRightArticulationBody != null)
+            {
+                JointCollisionDetector detector = _gripperRightArticulationBody.gameObject.AddComponent<JointCollisionDetector>();
+                detector.Initialize(this);
+            }
+
+            Debug.Log("RobotController: Collision detectors attached to all joints for self-collision detection.");
         }
     }
 }

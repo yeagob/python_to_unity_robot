@@ -9,6 +9,7 @@ class RewardComponents:
     alignment_reward: float = 0.0
     grasp_reward: float = 0.0
     collision_penalty: float = 0.0
+    survival_reward: float = 0.0
 
     @property
     def total_reward(self) -> float:
@@ -18,6 +19,7 @@ class RewardComponents:
             + self.alignment_reward
             + self.grasp_reward
             + self.collision_penalty
+            + self.survival_reward
         )
 
     def to_dictionary(self) -> dict:
@@ -27,5 +29,6 @@ class RewardComponents:
             "alignment": self.alignment_reward,
             "grasp": self.grasp_reward,
             "collision": self.collision_penalty,
+            "survival": self.survival_reward,
             "total": self.total_reward
         }
