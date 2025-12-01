@@ -52,7 +52,7 @@ class RewardCalculationService:
                 current_position, target_direction)
 
         # Survival reward (for existing without colliding)
-        reward_components.total_reward += self.SURVIVAL_REWARD
+        reward_components.survival_reward = self.SURVIVAL_REWARD
 
         # Action penalty (to encourage smooth movement)
         # Note: We don't have the action here, but we can infer it from joint changes or pass it in.

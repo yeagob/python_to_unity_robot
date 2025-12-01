@@ -24,22 +24,11 @@ namespace RobotSimulation.Controllers
 
         public CollisionType LastCollisionType => _lastCollisionType;
 
-        public bool SetEnabled
-		{
-			set
-			{
-                //Avoid crazy movements
-                _rootArticulationBody.enabled = value;
-            }
-		}
-
         public void InitializeController(IRobotService robotService)
         {
             _robotService = robotService;
             _collisionDetectedThisFrame = false;
             _lastCollisionType = CollisionType.None;
-
-            SetEnabled = false;
 
             // Attach collision detectors to all joints
             AttachCollisionDetectorsToJoints();

@@ -24,8 +24,8 @@ namespace RobotSimulation.Controllers
                 return;
             }
 
-            string collidedObjectTag = collisionInfo.gameObject.tag;
-            
+            string collidedObjectTag = collisionInfo.gameObject.name;
+
             // Check if this is a self-collision (collision with another part of the robot)
             if (IsRobotPart(collisionInfo.gameObject))
             {
