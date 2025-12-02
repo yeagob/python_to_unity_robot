@@ -1,9 +1,0 @@
-fileFormatVersion: 2
-guid: bc50c5d6e0c63dd49ac673f6d9acf68e
-AssetOrigin:
-  serializedVersion: 1
-  productId: 303030
-  packageName: realvirtual.io Digital Twin Starter 6
-  packageVersion: 6.0.8.8275
-  assetPath: Assets/realvirtual/private/Interfaces/IRaycaster.cs
-  uploadId: 820840

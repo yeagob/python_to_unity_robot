@@ -1,9 +1,0 @@
-fileFormatVersion: 2
-guid: 07c6e4d92ff76d24690de164ae623426
-AssetOrigin:
-  serializedVersion: 1
-  productId: 303030
-  packageName: realvirtual.io Digital Twin Starter 6
-  packageVersion: 6.0.8.8275
-  assetPath: Assets/realvirtual/Interfaces/OpenCommissioning/Runtime/Scripts/OCLinkSensor.cs
-  uploadId: 820840

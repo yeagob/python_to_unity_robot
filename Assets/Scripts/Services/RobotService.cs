@@ -17,8 +17,6 @@ namespace RobotSimulation.Services
         private float[] _targetJointAngles;
         private bool _axis6IsHorizontal;
 
-        private static readonly float[] JOINT_ANGLE_LIMITS = new float[] { 90.0f, 90.0f, 90.0f, 180.0f, 90.0f, 90.0f };
-
         public RobotControlMode CurrentControlMode => _currentControlMode;
 
         public RobotService(
@@ -110,6 +108,13 @@ namespace RobotSimulation.Services
         {
             _axis6IsHorizontal = isHorizontal;
 
+            // Only override if we are NOT in simulation mode (i.e. manual control or training initialization)
+            // If the agent is controlling the robot, it should set the angle via SetJointPositionsInterpolated
+            if (_currentControlMode == RobotControlMode.Simulation)
+            {
+                return;
+            }
+
             if (_jointArticulationBodies.Length >= 6)
             {
                 ArticulationBody axis6Joint = _jointArticulationBodies[5];
@@ -125,12 +130,9 @@ namespace RobotSimulation.Services
                 axis6Drive.target = targetAngle;
                 axis6Joint.xDrive = axis6Drive;
 
-                if (_currentControlMode == RobotControlMode.Training)
-                {
-                    ArticulationReducedSpace jointPosition = new ArticulationReducedSpace(
-                        targetAngle * Mathf.Deg2Rad);
-                    axis6Joint.jointPosition = jointPosition;
-                }
+                ArticulationReducedSpace jointPosition = new ArticulationReducedSpace(
+                    targetAngle * Mathf.Deg2Rad);
+                axis6Joint.jointPosition = jointPosition;
             }
         }
 
@@ -269,18 +271,38 @@ namespace RobotSimulation.Services
 
         private float ClampJointAngle(float angle, int jointIndex)
         {
-            if (jointIndex >= JOINT_ANGLE_LIMITS.Length)
+            if (jointIndex >= _jointArticulationBodies.Length)
             {
                 return angle;
             }
 
-            float limit = JOINT_ANGLE_LIMITS[jointIndex];
-            return Mathf.Clamp(angle, -limit, limit);
+            ArticulationBody joint = _jointArticulationBodies[jointIndex];
+            if (joint.dofCount != 1)
+            {
+                return angle;
+            }
+
+            float lowerLimit = joint.xDrive.lowerLimit;
+            float upperLimit = joint.xDrive.upperLimit;
+
+            return Mathf.Clamp(angle, lowerLimit, upperLimit);
         }
 
         public float[] GetJointAngleLimits()
         {
-            return (float[])JOINT_ANGLE_LIMITS.Clone();
+            float[] limits = new float[_jointArticulationBodies.Length];
+            for (int i = 0; i < _jointArticulationBodies.Length; i++)
+            {
+                if (_jointArticulationBodies[i].dofCount == 1)
+                {
+                    limits[i] = _jointArticulationBodies[i].xDrive.upperLimit;
+                }
+                else
+                {
+                    limits[i] = 0f;
+                }
+            }
+            return limits;
         }
     }
 }

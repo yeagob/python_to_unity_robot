@@ -1,9 +1,0 @@
-fileFormatVersion: 2
-guid: b59ee1747dedb2d4493b4e56cfdf8c84
-AssetOrigin:
-  serializedVersion: 1
-  productId: 303030
-  packageName: realvirtual.io Digital Twin Starter 6
-  packageVersion: 6.0.8.8275
-  assetPath: Assets/realvirtual/private/Interfaces/IAllScenesLoaded.cs
-  uploadId: 820840
