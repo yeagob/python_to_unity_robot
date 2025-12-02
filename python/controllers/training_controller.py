@@ -24,7 +24,7 @@ class TrainingController:
     DISCOUNT_FACTOR: float = 0.99
     GAE_LAMBDA: float = 0.95
     CLIP_RANGE: float = 0.2
-    ENTROPY_COEFFICIENT: float = 0.001
+    ENTROPY_COEFFICIENT: float = 0.003
     CHECKPOINT_FREQUENCY: int = 10000
 
     def __init__(
