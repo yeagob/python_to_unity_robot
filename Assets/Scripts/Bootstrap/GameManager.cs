@@ -2,6 +2,7 @@ using UnityEngine;
 using RobotSimulation.Controllers;
 using RobotSimulation.Enums;
 using RobotSimulation.Events;
+using RobotSimulation.Gizmos;
 using RobotSimulation.Models;
 using RobotSimulation.Services;
 using RobotSimulation.Services.Interfaces;
@@ -21,6 +22,9 @@ namespace RobotSimulation.Bootstrap
         [SerializeField] private RobotController _robotController;
         [SerializeField] private SensorController _sensorController;
         [SerializeField] private TargetController _targetController;
+
+        [Header("Debug Visualization")]
+        [SerializeField] private GizmosHeatmap _gizmosHeatmap;
 
         [Header("Configuration")]
         [SerializeField] private int _networkPortNumber = 5555;
@@ -88,6 +92,12 @@ namespace RobotSimulation.Bootstrap
             _robotController.InitializeController(_robotService);
             _sensorController.InitializeController(_sensorService);
             _targetController.InitializeController(_targetService);
+
+            // Optional: Initialize heatmap if assigned
+            if (_gizmosHeatmap != null)
+            {
+                _gizmosHeatmap.Initialize(_robotController);
+            }
         }
 
         private void ProcessNetworkCommands()

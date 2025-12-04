@@ -81,6 +81,59 @@ namespace RobotSimulation.Controllers
             return _toolCenterPointTransform;
         }
 
+        /// <summary>
+        /// Returns all colliders from the robot's articulation bodies.
+        /// Used by GizmosHeatmap for position tracking.
+        /// </summary>
+        public Collider[] GetAllJointColliders()
+        {
+            System.Collections.Generic.List<Collider> colliders = new System.Collections.Generic.List<Collider>();
+
+            // Add root collider
+            if (_rootArticulationBody != null)
+            {
+                Collider rootCollider = _rootArticulationBody.GetComponent<Collider>();
+                if (rootCollider != null)
+                {
+                    colliders.Add(rootCollider);
+                }
+            }
+
+            // Add joint colliders
+            foreach (ArticulationBody joint in _jointArticulationBodies)
+            {
+                if (joint != null)
+                {
+                    Collider jointCollider = joint.GetComponent<Collider>();
+                    if (jointCollider != null)
+                    {
+                        colliders.Add(jointCollider);
+                    }
+                }
+            }
+
+            // Add gripper colliders
+            if (_gripperLeftArticulationBody != null)
+            {
+                Collider leftCollider = _gripperLeftArticulationBody.GetComponent<Collider>();
+                if (leftCollider != null)
+                {
+                    colliders.Add(leftCollider);
+                }
+            }
+
+            if (_gripperRightArticulationBody != null)
+            {
+                Collider rightCollider = _gripperRightArticulationBody.GetComponent<Collider>();
+                if (rightCollider != null)
+                {
+                    colliders.Add(rightCollider);
+                }
+            }
+
+            return colliders.ToArray();
+        }
+
         private void OnCollisionEnter(Collision collisionInfo)
         {
             string collidedObjectTag = collisionInfo.gameObject.tag;
