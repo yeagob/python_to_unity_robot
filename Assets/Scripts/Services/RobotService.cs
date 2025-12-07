@@ -37,6 +37,7 @@ namespace RobotSimulation.Services
         public void Initialize(ConfigurationModel configuration)
         {
             _configuration = configuration;
+            ConfigureJointAnchorRotations();
             ConfigureArticulationDrives();
         }
 
@@ -236,6 +237,38 @@ namespace RobotSimulation.Services
                 drive.stiffness = _configuration.ArticulationDriveStiffness;
                 drive.damping = _configuration.ArticulationDriveDamping;
                 jointBody.xDrive = drive;
+            }
+        }
+
+        /// <summary>
+        /// Configures the anchor rotation for each joint to align the xDrive
+        /// with the joint's actual rotation axis.
+        /// </summary>
+        private void ConfigureJointAnchorRotations()
+        {
+            Vector3[] anchorRotations = _configuration.JointAnchorRotations;
+            int jointCount = Mathf.Min(anchorRotations.Length, _jointArticulationBodies.Length);
+
+            for (int jointIndex = 0; jointIndex < jointCount; jointIndex++)
+            {
+                ArticulationBody joint = _jointArticulationBodies[jointIndex];
+
+                if (joint == null)
+                {
+                    continue;
+                }
+
+                // Skip non-revolute joints
+                if (joint.jointType != ArticulationJointType.RevoluteJoint)
+                {
+                    continue;
+                }
+
+                Vector3 rotationEuler = anchorRotations[jointIndex];
+                Quaternion anchorRotation = Quaternion.Euler(rotationEuler);
+                joint.anchorRotation = anchorRotation;
+
+                Debug.Log($"RobotService: Joint {jointIndex + 1} anchor rotation set to {rotationEuler}");
             }
         }
 
