@@ -537,6 +537,56 @@ Transform:
   m_Children: []
   m_Father: {fileID: 4692763598600113}
   m_LocalEulerAnglesHint: {x: 30.000002, y: 0, z: 0}
+--- !u!1 &769667580
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 769667582}
+  - component: {fileID: 769667581}
+  m_Layer: 0
+  m_Name: Gizmos Heatmap
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!114 &769667581
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 769667580}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 14d6a827f8da9f840a1cc6419e34af51, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _robotController: {fileID: 4406894854937641}
+  _cellSize: 0.05
+  _maxHeatValue: 100
+  _gizmoAlpha: 0.6
+  _cubeScale: 0.8
+  _sampleInterval: 1
+--- !u!4 &769667582
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 769667580}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 5.4362006, y: 4.336885, z: 0.025697654}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &832575517
 GameObject:
   m_ObjectHideFlags: 0
@@ -664,7 +714,7 @@ MonoBehaviour:
   _robotController: {fileID: 4406894854937641}
   _sensorController: {fileID: 4887713085153354}
   _targetController: {fileID: 836891288}
-  _gizmosHeatmap: {fileID: 0}
+  _gizmosHeatmap: {fileID: 769667581}
   _networkPortNumber: 5555
   _physicsTimeStep: 0.02
 --- !u!4 &1095947099
@@ -1740,8 +1790,8 @@ ArticulationBody:
   m_Enabled: 1
   serializedVersion: 5
   m_Mass: 1
-  m_ParentAnchorPosition: {x: -0.89646727, y: 0.16341841, z: 0.00000067368353}
-  m_ParentAnchorRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_ParentAnchorPosition: {x: -0.89646715, y: 0.16341849, z: 0.00000066999826}
+  m_ParentAnchorRotation: {x: 0, y: 0, z: 0, w: 1.0000001}
   m_AnchorPosition: {x: 0, y: 0, z: 0}
   m_AnchorRotation: {x: 0, y: 0, z: 0, w: 1}
   m_MatchAnchors: 1
@@ -2671,7 +2721,7 @@ ArticulationBody:
   serializedVersion: 5
   m_Mass: 1
   m_ParentAnchorPosition: {x: 0.000000014901161, y: 0.840438, z: -3.1008085e-11}
-  m_ParentAnchorRotation: {x: 0, y: 0.70710677, z: 0, w: 0.70710677}
+  m_ParentAnchorRotation: {x: -0.01801643, y: 0.70687735, z: 0.01801643, w: 0.70687735}
   m_AnchorPosition: {x: 0, y: 0, z: 0}
   m_AnchorRotation: {x: 0, y: 0.70710677, z: 0, w: 0.70710677}
   m_MatchAnchors: 1
@@ -2845,3 +2895,4 @@ SceneRoots:
   - {fileID: 410087041}
   - {fileID: 832575519}
   - {fileID: 315839639}
+  - {fileID: 769667582}
