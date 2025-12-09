@@ -76,6 +76,29 @@ class UnityRobotEnvironment(gym.Env):
 
         self._network_service.connect()
 
+        # Initialize joint angle limits from Unity (only once at startup)
+        self._initialize_joint_limits()
+
+    def _initialize_joint_limits(self) -> None:
+        """Fetch and set joint angle limits from Unity server (called once at startup)."""
+        try:
+            reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
+            observation_model: ObservationModel = self._network_service.send_command(reset_command)
+
+            if observation_model.joint_angle_limits is not None:
+                received_limits = np.array(observation_model.joint_angle_limits)
+                print(f"INFO: Received joint limits from Unity: {received_limits}")
+
+                if np.all(received_limits > 0):
+                    self.JOINT_ANGLE_LIMITS = received_limits
+                    print(f"INFO: Joint angle limits initialized to: {self.JOINT_ANGLE_LIMITS}")
+                else:
+                    print(f"WARNING: Received invalid joint limits (some <= 0): {received_limits}. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+            else:
+                print(f"INFO: No joint limits received from Unity. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+        except Exception as e:
+            print(f"WARNING: Failed to initialize joint limits from Unity: {e}. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+
     def step(
         self,
         action: np.ndarray
@@ -148,16 +171,6 @@ class UnityRobotEnvironment(gym.Env):
 
         reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
         observation_model: ObservationModel = self._network_service.send_command(reset_command)
-
-        if observation_model.joint_angle_limits is not None:
-            received_limits = np.array(observation_model.joint_angle_limits)
-            print(f"DEBUG: Received joint limits from Unity: {received_limits}")
-            # Ensure we only check positive limits effectively
-            if np.all(received_limits > 0):
-                self.JOINT_ANGLE_LIMITS = received_limits
-                print(f"DEBUG: Updated JOINT_ANGLE_LIMITS to: {self.JOINT_ANGLE_LIMITS}")
-            else:
-                print(f"WARNING: Received invalid joint limits (some <= 0): {received_limits}. Keeping defaults.")
 
         self._reward_calculation_service.reset_state(observation_model)
 

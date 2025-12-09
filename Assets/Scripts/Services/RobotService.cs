@@ -270,8 +270,8 @@ namespace RobotSimulation.Services
 
                 Debug.Log($"RobotService: Joint {jointIndex + 1} anchor rotation set to {rotationEuler}");
             }
-            
-            LogJointLimitsDebug();
+
+            // LogJointLimitsDebug(); // Removed: contaminating console
         }
 
         private void LogJointLimitsDebug()

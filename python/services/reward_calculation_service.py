@@ -65,6 +65,7 @@ class RewardCalculationService:
 
         if reward_components.grasp_reward > 0.0:
             information_dictionary["success"] = True
+            episode_terminated = True  # Terminate episode on success to reset target
 
         # Check for collision
         collision_result: Tuple[float, bool] = self._calculate_collision_penalty(observation)
