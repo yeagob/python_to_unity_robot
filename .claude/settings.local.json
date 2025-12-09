@@ -8,7 +8,12 @@
       "Bash(python -m venv:*)",
       "Bash(python\\venv\\Scripts\\pip.exe:*)",
       "Bash(python/venv/Scripts/pip.exe:*)",
-      "Bash(python/venv/Scripts/python.exe:*)"
+      "Bash(python/venv/Scripts/python.exe:*)",
+      "Bash(dir /s /b *.log)",
+      "Bash(Get-ChildItem -Path . -Recurse -Filter \"*.log\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 10 -ExpandProperty FullName)",
+      "Bash(Get-ChildItem -Path \".\\python\" -Recurse -Directory -Filter \"*log*\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -ExpandProperty FullName)"
     ],
     "deny": [],
     "ask": []

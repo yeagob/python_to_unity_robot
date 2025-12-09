@@ -11,12 +11,12 @@ from models.reward_components import RewardComponents
 class RewardCalculationService:
     """Service for calculating RL rewards based on robot observations."""
 
-    DISTANCE_REWARD_SCALE: float = 10.0
-    ALIGNMENT_REWARD_SCALE: float = 0.5
-    GRASP_SUCCESS_REWARD: float = 100.0
-    COLLISION_PENALTY_VALUE: float = -300.0
-    UNDERGROUND_PENALTY_VALUE: float = -300.0
-    SURVIVAL_REWARD: float = 0.02
+    DISTANCE_REWARD_SCALE: float = 100.0
+    ALIGNMENT_REWARD_SCALE: float = 5.0
+    GRASP_SUCCESS_REWARD: float = 500.0
+    COLLISION_PENALTY_VALUE: float = -50.0
+    UNDERGROUND_PENALTY_VALUE: float = -50.0
+    SURVIVAL_REWARD: float = 0.2
     ACTION_PENALTY_SCALE: float = 0.05
     GRASP_DISTANCE_THRESHOLD: float = 0.3
     VELOCITY_MINIMUM_THRESHOLD: float = 1e-6
