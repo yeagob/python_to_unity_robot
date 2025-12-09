@@ -6,7 +6,7 @@ NETWORK_TIMEOUT_MILLISECONDS: int = 5000
 
 # Robot Configuration (6-DOF)
 NUMBER_OF_JOINTS: int = 6
-JOINT_ANGLE_LIMITS: list = [90.0, 90.0, 90.0, 180.0, 90.0, 90.0]
+JOINT_ANGLE_LIMITS: list = [360.0, 180.0, 180.0, 360.0, 180.0, 360.0]  # Full range (e.g. 360 for -180 to +180). Overridden by Unity.
 MAXIMUM_DELTA_DEGREES: float = 10.0
 
 # Observation Space

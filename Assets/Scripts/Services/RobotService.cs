@@ -270,6 +270,29 @@ namespace RobotSimulation.Services
 
                 Debug.Log($"RobotService: Joint {jointIndex + 1} anchor rotation set to {rotationEuler}");
             }
+            
+            LogJointLimitsDebug();
+        }
+
+        private void LogJointLimitsDebug()
+        {
+            string logMsg = "RobotService: Joint Limits Configuration:\n";
+            for (int i = 0; i < _jointArticulationBodies.Length; i++)
+            {
+                ArticulationBody joint = _jointArticulationBodies[i];
+                if (joint.dofCount == 1)
+                {
+                    float lower = joint.xDrive.lowerLimit;
+                    float upper = joint.xDrive.upperLimit;
+                    float range = upper - lower;
+                    logMsg += $"Joint {i}: Range [{lower:F1}, {upper:F1}] = {range:F1} deg\n";
+                }
+                else
+                {
+                    logMsg += $"Joint {i}: Fixed/No DOF\n";
+                }
+            }
+            Debug.Log(logMsg);
         }
 
         private float GetGripperOpenPercentage()
@@ -328,7 +351,9 @@ namespace RobotSimulation.Services
             {
                 if (_jointArticulationBodies[i].dofCount == 1)
                 {
-                    limits[i] = _jointArticulationBodies[i].xDrive.upperLimit;
+                    // Python needs the full range for normalization (e.g. 360 for -180 to +180)
+                    float range = _jointArticulationBodies[i].xDrive.upperLimit - _jointArticulationBodies[i].xDrive.lowerLimit;
+                    limits[i] = range;
                 }
                 else
                 {

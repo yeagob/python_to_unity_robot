@@ -150,7 +150,14 @@ class UnityRobotEnvironment(gym.Env):
         observation_model: ObservationModel = self._network_service.send_command(reset_command)
 
         if observation_model.joint_angle_limits is not None:
-            self.JOINT_ANGLE_LIMITS = np.array(observation_model.joint_angle_limits)
+            received_limits = np.array(observation_model.joint_angle_limits)
+            print(f"DEBUG: Received joint limits from Unity: {received_limits}")
+            # Ensure we only check positive limits effectively
+            if np.all(received_limits > 0):
+                self.JOINT_ANGLE_LIMITS = received_limits
+                print(f"DEBUG: Updated JOINT_ANGLE_LIMITS to: {self.JOINT_ANGLE_LIMITS}")
+            else:
+                print(f"WARNING: Received invalid joint limits (some <= 0): {received_limits}. Keeping defaults.")
 
         self._reward_calculation_service.reset_state(observation_model)
 
