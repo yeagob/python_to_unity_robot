@@ -351,9 +351,7 @@ namespace RobotSimulation.Services
             {
                 if (_jointArticulationBodies[i].dofCount == 1)
                 {
-                    // Python needs the full range for normalization (e.g. 360 for -180 to +180)
-                    float range = _jointArticulationBodies[i].xDrive.upperLimit - _jointArticulationBodies[i].xDrive.lowerLimit;
-                    limits[i] = range;
+                    limits[i] = _jointArticulationBodies[i].xDrive.upperLimit;
                 }
                 else
                 {
@@ -361,6 +359,23 @@ namespace RobotSimulation.Services
                 }
             }
             return limits;
+        }
+
+        public float[] GetJointAngleLowerLimits()
+        {
+            float[] lowerLimits = new float[_jointArticulationBodies.Length];
+            for (int i = 0; i < _jointArticulationBodies.Length; i++)
+            {
+                if (_jointArticulationBodies[i].dofCount == 1)
+                {
+                    lowerLimits[i] = _jointArticulationBodies[i].xDrive.lowerLimit;
+                }
+                else
+                {
+                    lowerLimits[i] = 0f;
+                }
+            }
+            return lowerLimits;
         }
     }
 }

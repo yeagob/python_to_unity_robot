@@ -16,7 +16,8 @@ namespace RobotSimulation.Models
         public bool CollisionDetected;
         public float[] TargetOrientationOneHot;
         public bool IsResetFrame;
-        public float[] JointAngleLimits;  // Send joint limits to Python (only on reset)
+        public float[] JointAngleLimits;  // Upper limits (for backward compatibility)
+        public float[] JointAngleLowerLimits;  // Lower limits (for asymmetric joints)
 
         public ObservationModel()
         {
@@ -25,6 +26,7 @@ namespace RobotSimulation.Models
             DirectionToTarget = new float[3];
             TargetOrientationOneHot = new float[2];
             JointAngleLimits = null;  // Only populated on reset frames
+            JointAngleLowerLimits = null;  // Only populated on reset frames
         }
 
         public string ToJson()

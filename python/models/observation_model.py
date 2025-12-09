@@ -17,7 +17,8 @@ class ObservationModel:
     collision_detected: bool
     target_orientation_one_hot: List[float]
     is_reset_frame: bool
-    joint_angle_limits: List[float] = None  # Sent by Unity on reset frames
+    joint_angle_limits: List[float] = None  # Upper limits (sent by Unity on reset frames)
+    joint_angle_lower_limits: List[float] = None  # Lower limits (sent by Unity on reset frames)
 
     @classmethod
     def from_dictionary(cls, data: dict) -> "ObservationModel":
@@ -34,7 +35,8 @@ class ObservationModel:
             collision_detected=data.get("CollisionDetected", False),
             target_orientation_one_hot=data.get("TargetOrientationOneHot", [1.0, 0.0]),
             is_reset_frame=data.get("IsResetFrame", False),
-            joint_angle_limits=data.get("JointAngleLimits")
+            joint_angle_limits=data.get("JointAngleLimits"),
+            joint_angle_lower_limits=data.get("JointAngleLowerLimits")
         )
 
     def to_dictionary(self) -> dict:

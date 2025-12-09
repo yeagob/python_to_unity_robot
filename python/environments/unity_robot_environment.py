@@ -22,8 +22,11 @@ class UnityRobotEnvironment(gym.Env):
     GRIPPER_CLOSE_THRESHOLD: float = 0.5
     DEFAULT_MAXIMUM_EPISODE_STEPS: int = 500
 
-    # Joint angle limits for normalization (6 joints)
-    JOINT_ANGLE_LIMITS: np.ndarray = np.array([90.0, 90.0, 90.0, 180.0, 90.0, 90.0])
+    # Joint angle limits for normalization (will be updated from Unity)
+    # Default symmetric limits as fallback
+    JOINT_UPPER_LIMITS: np.ndarray = np.array([90.0, 90.0, 90.0, 180.0, 90.0, 90.0])
+    JOINT_LOWER_LIMITS: np.ndarray = np.array([-90.0, -90.0, -90.0, -180.0, -90.0, -90.0])
+    
     WORKSPACE_RADIUS_METERS: float = 0.6
     LASER_MAXIMUM_RANGE_METERS: float = 1.0
 
@@ -85,19 +88,26 @@ class UnityRobotEnvironment(gym.Env):
             reset_command: CommandModel = CommandModel(command_type=CommandType.RESET)
             observation_model: ObservationModel = self._network_service.send_command(reset_command)
 
-            if observation_model.joint_angle_limits is not None:
-                received_limits = np.array(observation_model.joint_angle_limits)
-                print(f"INFO: Received joint limits from Unity: {received_limits}")
+            if observation_model.joint_angle_limits is not None and observation_model.joint_angle_lower_limits is not None:
+                received_upper = np.array(observation_model.joint_angle_limits)
+                received_lower = np.array(observation_model.joint_angle_lower_limits)
+                print(f"INFO: Received joint limits from Unity:")
+                print(f"      Upper: {received_upper}")
+                print(f"      Lower: {received_lower}")
 
-                if np.all(received_limits > 0):
-                    self.JOINT_ANGLE_LIMITS = received_limits
-                    print(f"INFO: Joint angle limits initialized to: {self.JOINT_ANGLE_LIMITS}")
+                # Validate limits
+                if len(received_upper) == len(received_lower) and np.all(received_upper >= received_lower):
+                    self.JOINT_UPPER_LIMITS = received_upper
+                    self.JOINT_LOWER_LIMITS = received_lower
+                    print(f"INFO: Joint angle limits initialized successfully")
                 else:
-                    print(f"WARNING: Received invalid joint limits (some <= 0): {received_limits}. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+                    print(f"WARNING: Received invalid joint limits. Using defaults.")
             else:
-                print(f"INFO: No joint limits received from Unity. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+                print(f"INFO: No joint limits received from Unity. Using defaults:")
+                print(f"      Upper: {self.JOINT_UPPER_LIMITS}")
+                print(f"      Lower: {self.JOINT_LOWER_LIMITS}")
         except Exception as e:
-            print(f"WARNING: Failed to initialize joint limits from Unity: {e}. Using defaults: {self.JOINT_ANGLE_LIMITS}")
+            print(f"WARNING: Failed to initialize joint limits from Unity: {e}. Using defaults.")
 
     def step(
         self,
@@ -213,8 +223,15 @@ class UnityRobotEnvironment(gym.Env):
             print(f"Detected {self._num_joints} joints from Unity")
 
         joint_angles_array: np.ndarray = np.array(observation.joint_angles)
-        joint_limits = self.JOINT_ANGLE_LIMITS[:self._num_joints]
-        normalized_joint_angles: np.ndarray = joint_angles_array / joint_limits
+        
+        # Get limits for the actual number of joints
+        upper_limits = self.JOINT_UPPER_LIMITS[:self._num_joints]
+        lower_limits = self.JOINT_LOWER_LIMITS[:self._num_joints]
+        
+        # Normalize using asymmetric formula: map [lower, upper] → [-1, 1]
+        # Formula: normalized = 2 * (angle - lower) / (upper - lower) - 1
+        ranges = upper_limits - lower_limits
+        normalized_joint_angles: np.ndarray = 2.0 * (joint_angles_array - lower_limits) / ranges - 1.0
 
         if self._num_joints < 6:
             padding = np.zeros(6 - self._num_joints)

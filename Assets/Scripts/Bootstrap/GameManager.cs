@@ -219,7 +219,8 @@ namespace RobotSimulation.Bootstrap
                 CollisionDetected = _robotController.CollisionDetectedThisFrame,
                 TargetOrientationOneHot = BuildTargetOrientationOneHot(),
                 IsResetFrame = isResetFrame,
-                JointAngleLimits = isResetFrame ? _robotService.GetJointAngleLimits() : null
+                JointAngleLimits = isResetFrame ? _robotService.GetJointAngleLimits() : null,
+                JointAngleLowerLimits = isResetFrame ? _robotService.GetJointAngleLowerLimits() : null
             };
 
             return observation;
